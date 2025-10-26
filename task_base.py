@@ -80,6 +80,14 @@ class TaskBase(ABC):
             self.pvs[pv_name] = pv_obj
         
         self.logger.info(f"Created {len(self.pvs)} PVs with prefix: {self.pv_prefix}")
+
+    def build_pvs(self):
+        """Public method to build PVs without initializing the IOC.
+
+        Use this when coordinating multiple tasks so that all records are created
+        before a single global LoadDatabase/iocInit is performed.
+        """
+        self._create_pvs()
     
     def _create_pv(self, pv_name: str, config: Dict[str, Any], is_output: bool):
         """
@@ -186,6 +194,19 @@ class TaskBase(ABC):
         # Set running flag
         self.running = True
         
+        # Start task execution in cothread
+        cothread.Spawn(self._run_wrapper)
+
+    def start_after_ioc(self):
+        """Start the task assuming IOC is already initialized globally."""
+        self.logger.info(f"Starting task (post-IOC): {self.name}")
+
+        # Task-specific initialization
+        self.initialize()
+
+        # Set running flag
+        self.running = True
+
         # Start task execution in cothread
         cothread.Spawn(self._run_wrapper)
     

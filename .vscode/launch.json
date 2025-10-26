@@ -11,9 +11,7 @@
                 "--config",
                 "tests/test-config.yaml",
                 "--values",
-                "tests/sparc-beamline.yaml",
-                "--log-level",
-                "DEBUG"
+                "tests/sparc-beamline.yaml"
             ],
             "cwd": "${workspaceFolder}",
             "env": {

@@ -13,7 +13,7 @@ from typing import Any
 from task_base import TaskBase
 
 
-class MotorControlTask(TaskBase):
+class CheckMotorMovement(TaskBase):
     """Task for monitoring motors using Ophyd devices."""
     
     def initialize(self):
@@ -26,20 +26,37 @@ class MotorControlTask(TaskBase):
         
         # Get motor devices from Ophyd devices
         self.motors = {}
-        for motor_name in self.motor_names:
-            motor_device = self.get_device(motor_name)
-            if motor_device:
-                self.motors[motor_name] = motor_device
-                self.logger.info(f"Found motor device: {motor_name}")
-            else:
-                self.logger.warning(f"Motor device not found: {motor_name}")
+        if not self.motor_names:
+            self.logger.warning("No motor_names provided; task will not monitor any motors.")
+        else:
+            # Expand names: allow passing IOC/group prefixes like 'tml-ch1' to match all devices with that prefix
+            all_devices = self.list_devices()
+            for requested in self.motor_names:
+                # Direct exact match first
+                dev = self.get_device(requested)
+                if dev:
+                    self.motors[requested] = dev
+                    self.logger.info(f"Found motor device: {requested}")
+                    continue
+
+                # Treat as prefix (e.g., 'tml-ch1' -> 'tml-ch1_*')
+                prefix = f"{requested}_"
+                matched = [name for name in all_devices if name.startswith(prefix)]
+                if matched:
+                    for name in matched:
+                        dev = self.get_device(name)
+                        if dev:
+                            self.motors[name] = dev
+                    self.logger.info(f"Expanded '{requested}' to {len(matched)} devices: {matched}")
+                else:
+                    self.logger.warning(f"Ophyd device {requested} not found and no devices matched prefix '{prefix}'")
         
         if not self.motors:
             self.logger.warning("No motor devices found!")
         
         # Log available devices
-        available_devices = self.list_devices()
-        self.logger.info(f"Available Ophyd devices: {available_devices}")
+        # available_devices = self.list_devices()
+        #self.logger.info(f"Available Ophyd devices: {available_devices}")
         
         # Track previous moving state to detect changes
         self.previous_moving_state = {}
@@ -48,10 +65,26 @@ class MotorControlTask(TaskBase):
         
         self.logger.info(f"Initialized with {len(self.motors)} motors")
     
+    def motor_moved_callback(self, motor_name: str, position: Any):
+        """Normalized motor movement callback: called with motor name and new position."""
+        self.logger.info(f"Motor {motor_name} moved to position {position}")
+
+    def make_user_readback_callback(self, motor_name: str):
+        """Adapter: map user_readback (timestamp, value, **kwargs) to motor_moved_callback."""
+        def callback(timestamp=None, value=None, **kwargs):
+            # Forward just the value (position) along with the motor name
+            self.motor_moved_callback(motor_name, value)
+        return callback
+
     def run(self):
         """Main task execution loop."""
         self.logger.info("Starting motor control task execution")
-        
+        for motor_name, motor in self.motors.items():
+            self.logger.info(f"Subscribing to user_readback for motor: {motor_name}")
+
+            motor.user_readback.subscribe(self.make_user_readback_callback(motor_name))
+
+
         while self.running:
             # Only process if task is enabled
             if not self.get_pv('ENABLE'):
@@ -73,8 +106,25 @@ class MotorControlTask(TaskBase):
         for motor_name, motor in self.motors.items():
             try:
                 # Check if motor is moving
-                is_moving = motor.moving
-                position = motor.position
+                is_moving = False
+                position = None
+
+                # moving may be a property (standard Ophyd) or a method (custom TML motor)
+                if hasattr(motor, 'moving'):
+                    mv = getattr(motor, 'moving')
+                    is_moving = mv() if callable(mv) else bool(mv)
+
+                # position may be a property or a method
+                if hasattr(motor, 'position'):
+                    pos_attr = getattr(motor, 'position')
+                    position = pos_attr() if callable(pos_attr) else pos_attr
+                else:
+                    # Fallback to user_readback if available
+                    rb = getattr(motor, 'user_readback', None)
+                    try:
+                        position = rb.get() if rb is not None else None
+                    except Exception:
+                        position = None
                 
                 # Detect state change from not moving to moving
                 if is_moving and not self.previous_moving_state[motor_name]:

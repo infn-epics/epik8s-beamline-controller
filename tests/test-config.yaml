@@ -49,42 +49,42 @@ tasks:
           value: "Initialized"
 
   # Example data logging task
-  - name: "logger_01"
-    module: "data_logging_task"
-    parameters:
-      log_interval: 10.0  # seconds
-      log_directory: "./logs"
-      log_format: "csv"  # csv or txt
-    pvs:
-      inputs:
-        VALUE1:
-          type: float
-          value: 0.0
-          unit: "A"
-          prec: 4
-        VALUE2:
-          type: float
-          value: 0.0
-          unit: "A"
-          prec: 4
-        VALUE3:
-          type: float
-          value: 0.0
-          unit: "A"
-          prec: 4
-        RESET_COUNT:
-          type: int
-          value: 0
-      outputs:
-        LOG_COUNT:
-          type: int
-          value: 0
-        LAST_LOG_TIME:
-          type: string
-          value: "Never"
-        STATUS:
-          type: string
-          value: "Initialized"
+  # - name: "logger_01"
+  #   module: "data_logging_task"
+  #   parameters:
+  #     log_interval: 10.0  # seconds
+  #     log_directory: "./logs"
+  #     log_format: "csv"  # csv or txt
+  #   pvs:
+  #     inputs:
+  #       VALUE1:
+  #         type: float
+  #         value: 0.0
+  #         unit: "A"
+  #         prec: 4
+  #       VALUE2:
+  #         type: float
+  #         value: 0.0
+  #         unit: "A"
+  #         prec: 4
+  #       VALUE3:
+  #         type: float
+  #         value: 0.0
+  #         unit: "A"
+  #         prec: 4
+  #       RESET_COUNT:
+  #         type: int
+  #         value: 0
+  #     outputs:
+  #       LOG_COUNT:
+  #         type: int
+  #         value: 0
+  #       LAST_LOG_TIME:
+  #         type: string
+  #         value: "Never"
+  #       STATUS:
+  #         type: string
+  #         value: "Initialized"
 
   # You can add more tasks here following the same pattern
   # - name: "your_task_name"
@@ -113,6 +113,8 @@ tasks:
       motor_names:
         - "tml-ch1"  # Example: matches IOC name from values.yaml
         - "tml-ch2"
+        - "tml-ch3"
+
     pvs:
       inputs:
         # For each motor, create move/home/stop commands and target position

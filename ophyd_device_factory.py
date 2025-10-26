@@ -22,6 +22,8 @@ class OphydDeviceFactory:
             # Import infn_ophyd_hal if available
             from infn_ophyd_hal import OphydTmlMotor, SppOphydBpm
             from infn_ophyd_hal import OphydPS, OphydPSSim, OphydPSDante
+            from infn_ophyd_hal import OphydRTD
+            from infn_ophyd_hal import OphydDI, OphydDO, OphydAI, OphydAO
             
             # Register motor devices
             self._device_map[('mot', 'tml')] = OphydTmlMotor
@@ -36,6 +38,13 @@ class OphydDeviceFactory:
             self._device_map[('mag', 'sim')] = OphydPSSim
             self._device_map[('mag', 'dante')] = OphydPSDante
             self._device_map[('mag', 'generic')] = OphydPS
+
+            # Register IO devices
+            self._device_map[('io', 'rtd')] = OphydRTD
+            self._device_map[('io', 'di')] = OphydDI
+            self._device_map[('io', 'do')] = OphydDO
+            self._device_map[('io', 'ai')] = OphydAI
+            self._device_map[('io', 'ao')] = OphydAO
             
             self.logger.info("Registered infn_ophyd_hal device types")
             
@@ -71,9 +80,17 @@ class OphydDeviceFactory:
         Returns:
             Ophyd device instance or None if type not supported
         """
-        # Try exact match first
-        key = (devgroup, devtype)
-        device_class = self._device_map.get(key)
+        # Try device-specific devtype override first (e.g., for iocs with multiple device kinds)
+        device_specific_type = config.get('devtype') if isinstance(config, dict) else None
+
+        device_class = None
+        if device_specific_type:
+            device_class = self._device_map.get((devgroup, device_specific_type))
+
+        # Try exact IOC-level devtype match if override not found
+        if not device_class:
+            key = (devgroup, devtype)
+            device_class = self._device_map.get(key)
         
         # Try with just devgroup if devtype not found
         if not device_class:

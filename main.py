@@ -15,6 +15,7 @@ from importlib import import_module
 import cothread
 
 from task_base import TaskBase
+from softioc import softioc, builder
 from ophyd_device_factory import OphydDeviceFactory
 
 
@@ -192,12 +193,39 @@ class BeamlineController:
                 self.logger.error(f"Failed to initialize task {task_name}: {e}", exc_info=True)
     
     def start_tasks(self):
-        """Start all tasks."""
-        self.logger.info("Starting tasks...")
-        
+        """Start all tasks with a single IOC initialization.
+
+        Steps:
+        1) Build all PVs for every task
+        2) Load the database and initialize the IOC ONCE
+        3) Start each task's logic after IOC is up
+        """
+        self.logger.info("Building task PVs...")
+
+        # 1) Build PVs for all tasks first
         for task in self.tasks:
             try:
-                task.start()
+                task.build_pvs()
+                self.logger.info(f"Built PVs for task: {task.name}")
+            except Exception as e:
+                self.logger.error(f"Failed to build PVs for task {task.name}: {e}", exc_info=True)
+
+        # 2) Initialize IOC once
+        self.logger.info("Loading database and initializing IOC once for all tasks...")
+        try:
+            builder.LoadDatabase()
+            softioc.iocInit()
+            self.logger.info("IOC initialized")
+            softioc.dbl()
+        except Exception as e:
+            self.logger.error(f"IOC initialization failed: {e}", exc_info=True)
+            raise
+
+        # 3) Start each task's processing after IOC is ready
+        self.logger.info("Starting task logic...")
+        for task in self.tasks:
+            try:
+                task.start_after_ioc()
                 self.logger.info(f"Started task: {task.name}")
             except Exception as e:
                 self.logger.error(f"Failed to start task {task.name}: {e}", exc_info=True)
