@@ -1,0 +1,132 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Beamline Controller test",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--config",
+                "tests/test-config.yaml",
+                "--values",
+                "tests/sparc-beamline.yaml",
+                "--log-level",
+                "DEBUG"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "EPICS_CA_ADDR_LIST": "10.10.6.244",
+                "EPICS_CA_AUTO_ADDR_LIST": "NO"
+            },
+            "justMyCode": false
+        },
+        {
+            "name": "Beamline Controller (INFO level)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--config",
+                "tests/config.yaml",
+                "--values",
+                "tests/sparc-beamline.yaml",
+                "--log-level",
+                "INFO"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "EPICS_CA_ADDR_LIST": "10.10.6.244",
+                "EPICS_CA_AUTO_ADDR_LIST": "NO"
+            },
+            "justMyCode": true
+        },
+        {
+            "name": "Beamline Controller (Custom Config)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--config",
+                "${input:configFile}",
+                "--values",
+                "${input:valuesFile}",
+                "--log-level",
+                "${input:logLevel}"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "justMyCode": true
+        },
+        {
+            "name": "Beamline Controller (SPARC)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--config",
+                "config.yaml",
+                "--values",
+                "${workspaceFolder}/../epik8-sparc/deploy/values.yaml",
+                "--log-level",
+                "INFO"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "EPICS_CA_ADDR_LIST": "192.168.117.224",
+                "EPICS_CA_AUTO_ADDR_LIST": "NO",
+                "http_proxy": "http://squid.lnf.infn.it:3128",
+                "https_proxy": "http://squid.lnf.infn.it:3128",
+                "no_proxy": "localhost,127.0.0.1,::1,10.0.0.0/8,192.168.0.0/16,.svc,.svc.cluster.local,.lnf.infn.it"
+            },
+            "justMyCode": false
+        },
+        {
+            "name": "Python: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        }
+    ],
+    "inputs": [
+        {
+            "id": "configFile",
+            "type": "promptString",
+            "description": "Path to config.yaml",
+            "default": "config.yaml"
+        },
+        {
+            "id": "valuesFile",
+            "type": "promptString",
+            "description": "Path to values.yaml",
+            "default": "values.yaml"
+        },
+        {
+            "id": "logLevel",
+            "type": "pickString",
+            "description": "Logging level",
+            "options": [
+                "DEBUG",
+                "INFO",
+                "WARNING",
+                "ERROR",
+                "CRITICAL"
+            ],
+            "default": "INFO"
+        }
+    ]
+}

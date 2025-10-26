@@ -1,0 +1,189 @@
+# Beamline Controller Configuration
+# This file defines the tasks to run and their configurations
+
+# List of tasks to execute
+tasks:
+  # Example monitoring task
+  - name: "monitor_01"
+    module: "monitoring_task"  # Python module name in tasks/ directory
+    parameters:
+      update_rate: 2.0  # Hz
+      calculation_type: "average"  # average, sum, max, min
+    pvs:
+      inputs:
+        INPUT1:
+          type: float
+          value: 0.0
+          unit: "V"
+          prec: 3
+          low: -10.0
+          high: 10.0
+        INPUT2:
+          type: float
+          value: 0.0
+          unit: "V"
+          prec: 3
+          low: -10.0
+          high: 10.0
+        INPUT3:
+          type: float
+          value: 0.0
+          unit: "V"
+          prec: 3
+          low: -10.0
+          high: 10.0
+        RESET:
+          type: int
+          value: 0
+      outputs:
+        OUTPUT_RESULT:
+          type: float
+          value: 0.0
+          unit: "V"
+          prec: 3
+        SAMPLE_COUNT:
+          type: int
+          value: 0
+        STATUS:
+          type: string
+          value: "Initialized"
+
+  # Example data logging task
+  - name: "logger_01"
+    module: "data_logging_task"
+    parameters:
+      log_interval: 10.0  # seconds
+      log_directory: "./logs"
+      log_format: "csv"  # csv or txt
+    pvs:
+      inputs:
+        VALUE1:
+          type: float
+          value: 0.0
+          unit: "A"
+          prec: 4
+        VALUE2:
+          type: float
+          value: 0.0
+          unit: "A"
+          prec: 4
+        VALUE3:
+          type: float
+          value: 0.0
+          unit: "A"
+          prec: 4
+        RESET_COUNT:
+          type: int
+          value: 0
+      outputs:
+        LOG_COUNT:
+          type: int
+          value: 0
+        LAST_LOG_TIME:
+          type: string
+          value: "Never"
+        STATUS:
+          type: string
+          value: "Initialized"
+
+  # You can add more tasks here following the same pattern
+  # - name: "your_task_name"
+  #   module: "your_task_module"
+  #   parameters:
+  #     param1: value1
+  #     param2: value2
+  #   pvs:
+  #     inputs:
+  #       INPUT_PV_NAME:
+  #         type: float
+  #         value: 0.0
+  #     outputs:
+  #       OUTPUT_PV_NAME:
+  #         type: float
+  #         value: 0.0
+
+
+  # Example motor control task using Ophyd devices
+  - name: "check_motor_movement"
+    module: "check_motor_movement"
+    parameters:
+      update_rate: 2.0  # Hz
+      # List of motor device names from values.yaml IOCs
+      # Format: "ioc_name" or "ioc_name_device_name" for multi-device IOCs
+      motor_names:
+        - "tml-ch1"  # Example: matches IOC name from values.yaml
+        - "tml-ch2"
+    pvs:
+      inputs:
+        # For each motor, create move/home/stop commands and target position
+        # Motor 1 controls
+        TML-CH1_TARGET:
+          type: float
+          value: 0.0
+          unit: "mm"
+          prec: 4
+          low: -100.0
+          high: 100.0
+        TML-CH1_MOVE_CMD:
+          type: bool
+          value: 0
+          znam: "Idle"
+          onam: "Move"
+        TML-CH1_HOME_CMD:
+          type: bool
+          value: 0
+          znam: "Idle"
+          onam: "Home"
+        TML-CH1_STOP_CMD:
+          type: bool
+          value: 0
+          znam: "Idle"
+          onam: "Stop"
+        # Motor 2 controls
+        TML-CH2_TARGET:
+          type: float
+          value: 0.0
+          unit: "mm"
+          prec: 4
+          low: -100.0
+          high: 100.0
+        TML-CH2_MOVE_CMD:
+          type: bool
+          value: 0
+          znam: "Idle"
+          onam: "Move"
+        TML-CH2_HOME_CMD:
+          type: bool
+          value: 0
+          znam: "Idle"
+          onam: "Home"
+        TML-CH2_STOP_CMD:
+          type: bool
+          value: 0
+          znam: "Idle"
+          onam: "Stop"
+      outputs:
+        # Motor positions and status
+        TML-CH1_POS:
+          type: float
+          value: 0.0
+          unit: "mm"
+          prec: 4
+        TML-CH1_MOVING:
+          type: bool
+          value: 0
+          znam: "Stopped"
+          onam: "Moving"
+        TML-CH2_POS:
+          type: float
+          value: 0.0
+          unit: "mm"
+          prec: 4
+        TML-CH2_MOVING:
+          type: bool
+          value: 0
+          znam: "Stopped"
+          onam: "Moving"
+        STATUS:
+          type: string
+          value: "Initialized"

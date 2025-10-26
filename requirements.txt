@@ -1,0 +1,23 @@
+# Beamline Controller Requirements
+# Python dependencies for the beamline controller application
+
+# EPICS soft IOC support (pythonSoftIOC)
+softioc>=4.6.1
+
+# Cothread for cooperative threading
+cothread>=2.19
+
+# YAML parsing
+PyYAML>=6.0
+
+# Ophyd for device abstraction
+ophyd>=1.6.0
+
+# INFN Ophyd HAL (if available locally, otherwise install from source)
+infn_ophyd_hal
+
+# Logging and utilities
+python-dateutil>=2.8.0
+
+# Numpy for data processing
+numpy>=1.21.0
