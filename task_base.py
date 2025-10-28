@@ -17,7 +17,7 @@ class TaskBase(ABC):
     
     def __init__(self, name: str, parameters: Dict[str, Any], 
                  pv_definitions: Dict[str, Any], beamline_config: Dict[str, Any],
-                 ophyd_devices: Dict[str, object] = None):
+                 ophyd_devices: Dict[str, object] = None, prefix: str = None):
         """
         Initialize task.
         
@@ -27,6 +27,7 @@ class TaskBase(ABC):
             pv_definitions: PV definitions (inputs/outputs)
             beamline_config: Full beamline configuration from values.yaml
             ophyd_devices: Dictionary of Ophyd device instances from beamline
+            prefix: PV prefix from main controller (overrides beamline_config)
         """
         self.name = name
         self.parameters = parameters
@@ -44,8 +45,8 @@ class TaskBase(ABC):
         self.running = False
         self.task_lock = threading.Lock()
         
-        # Get PV prefix from beamline config or use default
-        self.pv_prefix = self._get_pv_prefix()
+        # Get PV prefix from controller or beamline config
+        self.pv_prefix = self._get_pv_prefix(prefix)
 
         # Task mode: 'continuous' (default) or 'triggered'
         mode = parameters.get('mode') or ('triggered' if parameters.get('triggered') else 'continuous')
@@ -58,14 +59,21 @@ class TaskBase(ABC):
         # For triggered execution
         self._trigger_thread = None
         
-    def _get_pv_prefix(self) -> str:
+    def _get_pv_prefix(self, controller_prefix: str = None) -> str:
         """
-        Get PV prefix from beamline configuration.
+        Get PV prefix for this task.
+        
+        Args:
+            controller_prefix: Prefix provided by main controller
         
         Returns:
             PV prefix string
         """
-        # Extract from beamline config if available
+        # Use controller prefix if provided, otherwise extract from beamline config
+        if controller_prefix:
+            return f"{controller_prefix}:{self.name.upper()}"
+        
+        # Fallback to extracting from beamline config
         beamline = self.beamline_config.get('beamline', 'BEAMLINE')
         namespace = self.beamline_config.get('namespace', 'DEFAULT')
         return f"{beamline.upper()}:{namespace.upper()}:{self.name.upper()}"
@@ -80,15 +88,21 @@ class TaskBase(ABC):
                                               initial_value=1,
                                               on_update=lambda value: self._on_enable_changed(value))
 
-        # Create RUN PV
+        # Create STATUS multistate PV (INIT=0, RUN=1, PAUSED=2, END=3, ERROR=4)
+        self.pvs['STATUS'] = builder.mbbIn('STATUS',
+                                           initial_value=0,
+                                           ZRST='INIT', ONST='RUN', TWST='PAUSED',
+                                           THST='END', FRST='ERROR')
+        
+        # Create MESSAGE string PV for task messages and errors
+        self.pvs['MESSAGE'] = builder.stringIn('MESSAGE',
+                                               initial_value='Initialized')
+
+        # Create RUN trigger button for triggered tasks
         if self.mode == 'triggered':
-            # Button to trigger a one-shot run
             self.pvs['RUN'] = builder.boolOut('RUN', 
                                               initial_value=0,
                                               on_update=lambda value: self._on_run_trigger(value))
-        else:
-            # Read-only indicator reflecting thread running state
-            self.pvs['RUN'] = builder.boolIn('RUN', initial_value=0)
 
         # Cycle counter for continuous tasks
         if self.mode == 'continuous':
@@ -197,7 +211,13 @@ class TaskBase(ABC):
     def _on_enable_changed(self, value):
         """Handle enable/disable PV changes."""
         self.enabled = bool(value)
-        self.logger.info(f"Task {'enabled' if self.enabled else 'disabled'}")
+        status_msg = 'enabled' if self.enabled else 'disabled'
+        self.logger.info(f"Task {status_msg}")
+        self.set_message(f"Task {status_msg}")
+        if not self.enabled:
+            self.set_status('PAUSED')
+        else:
+            self.set_status('RUN')
         self.on_pv_write('ENABLE', value)
     
     def start(self):
@@ -216,20 +236,18 @@ class TaskBase(ABC):
         # Call task-specific initialization
         self.initialize()
         
-        # Set running flag
+        # Set running flag and status
         self.running = True
-        # Reflect running state for continuous tasks
-        if self.mode == 'continuous' and 'RUN' in self.pvs:
-            try:
-                self.pvs['RUN'].set(1)
-            except Exception:
-                pass
+        self.set_status('RUN')
+        self.set_message('Task running')
         
         # Start task execution loop only for continuous tasks
         if self.mode == 'continuous':
             cothread.Spawn(self._run_wrapper)
         else:
             self.logger.info("Triggered mode: no continuous run loop started. Use RUN to trigger execution.")
+            self.set_status('INIT')
+            self.set_message('Ready for trigger')
 
     def start_after_ioc(self):
         """Start the task assuming IOC is already initialized globally."""
@@ -238,20 +256,18 @@ class TaskBase(ABC):
         # Task-specific initialization
         self.initialize()
 
-        # Set running flag
+        # Set running flag and status
         self.running = True
-        # Reflect running state for continuous tasks
-        if self.mode == 'continuous' and 'RUN' in self.pvs:
-            try:
-                self.pvs['RUN'].set(1)
-            except Exception:
-                pass
+        self.set_status('RUN')
+        self.set_message('Task running')
 
         # Start task execution loop only for continuous tasks
         if self.mode == 'continuous':
             cothread.Spawn(self._run_wrapper)
         else:
             self.logger.info("Triggered mode: no continuous run loop started. Use RUN to trigger execution.")
+            self.set_status('INIT')
+            self.set_message('Ready for trigger')
     
     def _run_wrapper(self):
         """Wrapper for run method to handle exceptions."""
@@ -259,6 +275,8 @@ class TaskBase(ABC):
             self.run()
         except Exception as e:
             self.logger.error(f"Error in task execution: {e}", exc_info=True)
+            self.set_status('ERROR')
+            self.set_message(f"Error: {str(e)}")
             self.running = False
     
     def stop(self):
@@ -267,12 +285,8 @@ class TaskBase(ABC):
         
         # Set running flag to false
         self.running = False
-        # Reflect running state for continuous tasks
-        if self.mode == 'continuous' and 'RUN' in self.pvs:
-            try:
-                self.pvs['RUN'].set(0)
-            except Exception:
-                pass
+        self.set_status('END')
+        self.set_message('Task stopped')
         
         # Call task-specific cleanup
         self.cleanup()
@@ -318,6 +332,40 @@ class TaskBase(ABC):
         else:
             self.logger.warning(f"PV {pv_name} not found")
             return None
+    
+    def set_status(self, status: str):
+        """
+        Set the task STATUS PV.
+        
+        Args:
+            status: One of 'INIT', 'RUN', 'PAUSED', 'END', 'ERROR'
+        """
+        status_map = {
+            'INIT': 0,
+            'RUN': 1,
+            'PAUSED': 2,
+            'END': 3,
+            'ERROR': 4
+        }
+        status_upper = status.upper()
+        if status_upper in status_map and 'STATUS' in self.pvs:
+            try:
+                self.pvs['STATUS'].set(status_map[status_upper])
+            except Exception as e:
+                self.logger.warning(f"Failed to set STATUS: {e}")
+    
+    def set_message(self, message: str):
+        """
+        Set the task MESSAGE PV.
+        
+        Args:
+            message: Message string to display
+        """
+        if 'MESSAGE' in self.pvs:
+            try:
+                self.pvs['MESSAGE'].set(str(message)[:39])  # EPICS string limit
+            except Exception as e:
+                self.logger.warning(f"Failed to set MESSAGE: {e}")
     
     def get_device(self, device_name: str):
         """
@@ -435,14 +483,23 @@ class TaskBase(ABC):
     def _trigger_wrapper(self):
         """Wrapper for triggered execution with error handling."""
         self.logger.info("Triggered run started")
+        self.set_status('RUN')
+        self.set_message('Executing triggered action')
         try:
             self.triggered()
-            self.set_pv('STATUS', 'Triggered run completed')
+            self.set_status('END')
+            self.set_message('Triggered run completed')
         except Exception as e:
             self.logger.error(f"Error in triggered run: {e}", exc_info=True)
-            self.set_pv('STATUS', f"ERROR: {str(e)}")
+            self.set_status('ERROR')
+            self.set_message(f"Error: {str(e)}")
         finally:
             self.logger.info("Triggered run finished")
+            # Return to INIT state for next trigger
+            cothread.Sleep(2)  # Brief delay to show completion
+            if self.enabled:
+                self.set_status('INIT')
+                self.set_message('Ready for trigger')
 
     def triggered(self):
         """Override in subclasses to implement the one-shot action for triggered mode."""

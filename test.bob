@@ -1,138 +1,162 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <display typeId="org.csstudio.opibuilder.Display" version="1.0.0">
   <name>Task Control Panel</name>
-  <width>800</width>
+  <width>900</width>
   <height>600</height>
   <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
     <x>10</x><y>10</y><width>300</width><height>30</height>
     <text>Beamline Task Control & Status</text>
     <font><opifont.name>Arial</opifont.name><opifont.size>18</opifont.size><opifont.style>bold</opifont.style></font>
   </widget>
+  <!-- Column Headers -->
+  <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
+    <x>10</x><y>50</y><width>150</width><height>20</height>
+    <text>Task Name</text>
+    <font><opifont.name>Arial</opifont.name><opifont.size>10</opifont.size><opifont.style>bold</opifont.style></font>
+  </widget>
+  <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
+    <x>170</x><y>50</y><width>60</width><height>20</height>
+    <text>Enable</text>
+    <font><opifont.name>Arial</opifont.name><opifont.size>10</opifont.size><opifont.style>bold</opifont.style></font>
+  </widget>
+  <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
+    <x>240</x><y>50</y><width>80</width><height>20</height>
+    <text>Status</text>
+    <font><opifont.name>Arial</opifont.name><opifont.size>10</opifont.size><opifont.style>bold</opifont.style></font>
+  </widget>
+  <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
+    <x>330</x><y>50</y><width>60</width><height>20</height>
+    <text>Cycles</text>
+    <font><opifont.name>Arial</opifont.name><opifont.size>10</opifont.size><opifont.style>bold</opifont.style></font>
+  </widget>
+  <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
+    <x>400</x><y>50</y><width>450</width><height>20</height>
+    <text>Message</text>
+    <font><opifont.name>Arial</opifont.name><opifont.size>10</opifont.size><opifont.style>bold</opifont.style></font>
+  </widget>
   <!-- Monitoring Task -->
   <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
-    <x>10</x><y>60</y><width>200</width><height>20</height>
+    <x>10</x><y>80</y><width>150</width><height>20</height>
     <text>MonitoringTask</text>
   </widget>
   <widget typeId="org.csstudio.opibuilder.widgets.BoolButton" version="1.0.0">
-    <x>220</x><y>60</y><width>80</width><height>20</height>
+    <x>170</x><y>80</y><width>60</width><height>20</height>
     <pv_name>SPARC:SPARC:MONITORINGTASK:ENABLE</pv_name>
     <text>Enable</text>
   </widget>
-  <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
-    <x>310</x><y>60</y><width>60</width><height>20</height>
-    <text>RUN</text>
-  </widget>
-  <widget typeId="org.csstudio.opibuilder.widgets.BooleanIndicator" version="1.0.0">
-    <x>370</x><y>60</y><width>20</width><height>20</height>
-    <pv_name>SPARC:SPARC:MONITORINGTASK:RUN</pv_name>
-  </widget>
-  <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
-    <x>400</x><y>60</y><width>80</width><height>20</height>
-    <text>Cycles</text>
+  <widget typeId="org.csstudio.opibuilder.widgets.TextInput" version="1.0.0">
+    <x>240</x><y>80</y><width>80</width><height>20</height>
+    <pv_name>SPARC:SPARC:MONITORINGTASK:STATUS</pv_name>
+    <read_only>true</read_only>
   </widget>
   <widget typeId="org.csstudio.opibuilder.widgets.TextInput" version="1.0.0">
-    <x>480</x><y>60</y><width>60</width><height>20</height>
+    <x>330</x><y>80</y><width>60</width><height>20</height>
     <pv_name>SPARC:SPARC:MONITORINGTASK:CYCLE_COUNT</pv_name>
+    <read_only>true</read_only>
+  </widget>
+  <widget typeId="org.csstudio.opibuilder.widgets.TextInput" version="1.0.0">
+    <x>400</x><y>80</y><width>450</width><height>20</height>
+    <pv_name>SPARC:SPARC:MONITORINGTASK:MESSAGE</pv_name>
     <read_only>true</read_only>
   </widget>
   <!-- Data Logging Task -->
   <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
-    <x>10</x><y>100</y><width>200</width><height>20</height>
+    <x>10</x><y>110</y><width>150</width><height>20</height>
     <text>DataLoggingTask</text>
   </widget>
   <widget typeId="org.csstudio.opibuilder.widgets.BoolButton" version="1.0.0">
-    <x>220</x><y>100</y><width>80</width><height>20</height>
+    <x>170</x><y>110</y><width>60</width><height>20</height>
     <pv_name>SPARC:SPARC:DATALOGGINGTASK:ENABLE</pv_name>
     <text>Enable</text>
   </widget>
-  <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
-    <x>310</x><y>100</y><width>60</width><height>20</height>
-    <text>RUN</text>
-  </widget>
-  <widget typeId="org.csstudio.opibuilder.widgets.BooleanIndicator" version="1.0.0">
-    <x>370</x><y>100</y><width>20</width><height>20</height>
-    <pv_name>SPARC:SPARC:DATALOGGINGTASK:RUN</pv_name>
-  </widget>
-  <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
-    <x>400</x><y>100</y><width>80</width><height>20</height>
-    <text>Cycles</text>
+  <widget typeId="org.csstudio.opibuilder.widgets.TextInput" version="1.0.0">
+    <x>240</x><y>110</y><width>80</width><height>20</height>
+    <pv_name>SPARC:SPARC:DATALOGGINGTASK:STATUS</pv_name>
+    <read_only>true</read_only>
   </widget>
   <widget typeId="org.csstudio.opibuilder.widgets.TextInput" version="1.0.0">
-    <x>480</x><y>100</y><width>60</width><height>20</height>
+    <x>330</x><y>110</y><width>60</width><height>20</height>
     <pv_name>SPARC:SPARC:DATALOGGINGTASK:CYCLE_COUNT</pv_name>
+    <read_only>true</read_only>
+  </widget>
+  <widget typeId="org.csstudio.opibuilder.widgets.TextInput" version="1.0.0">
+    <x>400</x><y>110</y><width>450</width><height>20</height>
+    <pv_name>SPARC:SPARC:DATALOGGINGTASK:MESSAGE</pv_name>
     <read_only>true</read_only>
   </widget>
   <!-- Check Motor Movement Task -->
   <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
-    <x>10</x><y>140</y><width>200</width><height>20</height>
+    <x>10</x><y>140</y><width>150</width><height>20</height>
     <text>CheckMotorMovement</text>
   </widget>
   <widget typeId="org.csstudio.opibuilder.widgets.BoolButton" version="1.0.0">
-    <x>220</x><y>140</y><width>80</width><height>20</height>
+    <x>170</x><y>140</y><width>60</width><height>20</height>
     <pv_name>SPARC:SPARC:CHECK_MOTOR_MOVEMENT:ENABLE</pv_name>
     <text>Enable</text>
   </widget>
-  <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
-    <x>310</x><y>140</y><width>60</width><height>20</height>
-    <text>RUN</text>
-  </widget>
-  <widget typeId="org.csstudio.opibuilder.widgets.BooleanIndicator" version="1.0.0">
-    <x>370</x><y>140</y><width>20</width><height>20</height>
-    <pv_name>SPARC:SPARC:CHECK_MOTOR_MOVEMENT:RUN</pv_name>
-  </widget>
-  <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
-    <x>400</x><y>140</y><width>80</width><height>20</height>
-    <text>Cycles</text>
+  <widget typeId="org.csstudio.opibuilder.widgets.TextInput" version="1.0.0">
+    <x>240</x><y>140</y><width>80</width><height>20</height>
+    <pv_name>SPARC:SPARC:CHECK_MOTOR_MOVEMENT:STATUS</pv_name>
+    <read_only>true</read_only>
   </widget>
   <widget typeId="org.csstudio.opibuilder.widgets.TextInput" version="1.0.0">
-    <x>480</x><y>140</y><width>60</width><height>20</height>
+    <x>330</x><y>140</y><width>60</width><height>20</height>
     <pv_name>SPARC:SPARC:CHECK_MOTOR_MOVEMENT:CYCLE_COUNT</pv_name>
+    <read_only>true</read_only>
+  </widget>
+  <widget typeId="org.csstudio.opibuilder.widgets.TextInput" version="1.0.0">
+    <x>400</x><y>140</y><width>450</width><height>20</height>
+    <pv_name>SPARC:SPARC:CHECK_MOTOR_MOVEMENT:MESSAGE</pv_name>
     <read_only>true</read_only>
   </widget>
   <!-- Laser Synch Task -->
   <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
-    <x>10</x><y>180</y><width>200</width><height>20</height>
+    <x>10</x><y>170</y><width>150</width><height>20</height>
     <text>LaserSynchTask</text>
   </widget>
   <widget typeId="org.csstudio.opibuilder.widgets.BoolButton" version="1.0.0">
-    <x>220</x><y>180</y><width>80</width><height>20</height>
+    <x>170</x><y>170</y><width>60</width><height>20</height>
     <pv_name>SPARC:SPARC:LASERSYNCHTASK:ENABLE</pv_name>
     <text>Enable</text>
   </widget>
-  <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
-    <x>310</x><y>180</y><width>60</width><height>20</height>
-    <text>RUN</text>
-  </widget>
-  <widget typeId="org.csstudio.opibuilder.widgets.BooleanIndicator" version="1.0.0">
-    <x>370</x><y>180</y><width>20</width><height>20</height>
-    <pv_name>SPARC:SPARC:LASERSYNCHTASK:RUN</pv_name>
-  </widget>
-  <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
-    <x>400</x><y>180</y><width>80</width><height>20</height>
-    <text>Cycles</text>
+  <widget typeId="org.csstudio.opibuilder.widgets.TextInput" version="1.0.0">
+    <x>240</x><y>170</y><width>80</width><height>20</height>
+    <pv_name>SPARC:SPARC:LASERSYNCHTASK:STATUS</pv_name>
+    <read_only>true</read_only>
   </widget>
   <widget typeId="org.csstudio.opibuilder.widgets.TextInput" version="1.0.0">
-    <x>480</x><y>180</y><width>60</width><height>20</height>
+    <x>330</x><y>170</y><width>60</width><height>20</height>
     <pv_name>SPARC:SPARC:LASERSYNCHTASK:CYCLE_COUNT</pv_name>
+    <read_only>true</read_only>
+  </widget>
+  <widget typeId="org.csstudio.opibuilder.widgets.TextInput" version="1.0.0">
+    <x>400</x><y>170</y><width>450</width><height>20</height>
+    <pv_name>SPARC:SPARC:LASERSYNCHTASK:MESSAGE</pv_name>
     <read_only>true</read_only>
   </widget>
   <!-- Example Triggered Task (if present) -->
   <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
-    <x>10</x><y>220</y><width>200</width><height>20</height>
+    <x>10</x><y>210</y><width>150</width><height>20</height>
     <text>ExampleTriggeredTask</text>
   </widget>
   <widget typeId="org.csstudio.opibuilder.widgets.BoolButton" version="1.0.0">
-    <x>220</x><y>220</y><width>80</width><height>20</height>
+    <x>170</x><y>210</y><width>60</width><height>20</height>
+    <pv_name>SPARC:SPARC:EXAMPLETRIGGEREDTASK:ENABLE</pv_name>
+    <text>Enable</text>
+  </widget>
+  <widget typeId="org.csstudio.opibuilder.widgets.TextInput" version="1.0.0">
+    <x>240</x><y>210</y><width>80</width><height>20</height>
+    <pv_name>SPARC:SPARC:EXAMPLETRIGGEREDTASK:STATUS</pv_name>
+    <read_only>true</read_only>
+  </widget>
+  <widget typeId="org.csstudio.opibuilder.widgets.BoolButton" version="1.0.0">
+    <x>330</x><y>210</y><width>60</width><height>20</height>
     <pv_name>SPARC:SPARC:EXAMPLETRIGGEREDTASK:RUN</pv_name>
     <text>Trigger</text>
   </widget>
-  <widget typeId="org.csstudio.opibuilder.widgets.Label" version="1.0.0">
-    <x>310</x><y>220</y><width>80</width><height>20</height>
-    <text>Status</text>
-  </widget>
   <widget typeId="org.csstudio.opibuilder.widgets.TextInput" version="1.0.0">
-    <x>400</x><y>220</y><width>200</width><height>20</height>
-    <pv_name>SPARC:SPARC:EXAMPLETRIGGEREDTASK:STATUS</pv_name>
+    <x>400</x><y>210</y><width>450</width><height>20</height>
+    <pv_name>SPARC:SPARC:EXAMPLETRIGGEREDTASK:MESSAGE</pv_name>
     <read_only>true</read_only>
   </widget>
 </display>

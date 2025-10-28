@@ -40,7 +40,7 @@ class BeamlineController:
         
         # Task management
         self.tasks: List[TaskBase] = []
-        
+        self.prefix = self.config.get('prefix', 'BEAMLINE:CONTROL')
         # Ophyd device management
         self.ophyd_devices: Dict[str, object] = {}
         self.ophyd_factory = OphydDeviceFactory()
@@ -183,7 +183,8 @@ class BeamlineController:
                     parameters=parameters,
                     pv_definitions=pv_definitions,
                     beamline_config=self.beamline_values,
-                    ophyd_devices=self.ophyd_devices
+                    ophyd_devices=self.ophyd_devices,
+                    prefix=self.prefix
                 )
                 
                 self.tasks.append(task)

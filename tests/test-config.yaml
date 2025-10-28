@@ -1,6 +1,7 @@
 # Beamline Controller Configuration
 # This file defines the tasks to run and their configurations
 
+prefix: "SPARC:CONTROL" 
 # List of tasks to execute
 tasks:
   # Example monitoring task
@@ -114,78 +115,11 @@ tasks:
         - "tml-ch1"  # Example: matches IOC name from values.yaml
         - "tml-ch2"
         - "tml-ch3"
-
     pvs:
-      inputs:
-        # For each motor, create move/home/stop commands and target position
-        # Motor 1 controls
-        TML-CH1_TARGET:
-          type: float
-          value: 0.0
-          unit: "mm"
-          prec: 4
-          low: -100.0
-          high: 100.0
-        TML-CH1_MOVE_CMD:
-          type: bool
-          value: 0
-          znam: "Idle"
-          onam: "Move"
-        TML-CH1_HOME_CMD:
-          type: bool
-          value: 0
-          znam: "Idle"
-          onam: "Home"
-        TML-CH1_STOP_CMD:
-          type: bool
-          value: 0
-          znam: "Idle"
-          onam: "Stop"
-        # Motor 2 controls
-        TML-CH2_TARGET:
-          type: float
-          value: 0.0
-          unit: "mm"
-          prec: 4
-          low: -100.0
-          high: 100.0
-        TML-CH2_MOVE_CMD:
-          type: bool
-          value: 0
-          znam: "Idle"
-          onam: "Move"
-        TML-CH2_HOME_CMD:
-          type: bool
-          value: 0
-          znam: "Idle"
-          onam: "Home"
-        TML-CH2_STOP_CMD:
-          type: bool
-          value: 0
-          znam: "Idle"
-          onam: "Stop"
       outputs:
-        # Motor positions and status
-        TML-CH1_POS:
-          type: float
-          value: 0.0
-          unit: "mm"
-          prec: 4
-        TML-CH1_MOVING:
+        MOVING:
           type: bool
           value: 0
           znam: "Stopped"
           onam: "Moving"
-        TML-CH2_POS:
-          type: float
-          value: 0.0
-          unit: "mm"
-          prec: 4
-        TML-CH2_MOVING:
-          type: bool
-          value: 0
-          znam: "Stopped"
-          onam: "Moving"
-        STATUS:
-          type: string
-          value: "Initialized"
+        
