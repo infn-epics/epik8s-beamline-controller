@@ -94,6 +94,8 @@ class CheckMotorMovement(TaskBase):
             
             try:
                 self._monitor_motors()
+                # increment cycle counter
+                self.step_cycle()
             except Exception as e:
                 self.logger.error(f"Error in processing cycle: {e}", exc_info=True)
                 self.set_pv('STATUS', f"ERROR: {str(e)}")

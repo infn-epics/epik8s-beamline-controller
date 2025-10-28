@@ -46,6 +46,17 @@ class TaskBase(ABC):
         
         # Get PV prefix from beamline config or use default
         self.pv_prefix = self._get_pv_prefix()
+
+        # Task mode: 'continuous' (default) or 'triggered'
+        mode = parameters.get('mode') or ('triggered' if parameters.get('triggered') else 'continuous')
+        self.mode = str(mode).lower() if isinstance(mode, str) else 'continuous'
+        if self.mode not in ('continuous', 'triggered'):
+            self.mode = 'continuous'
+
+        # Cycle counter for continuous tasks
+        self.cycle_count = 0
+        # For triggered execution
+        self._trigger_thread = None
         
     def _get_pv_prefix(self) -> str:
         """
@@ -68,6 +79,20 @@ class TaskBase(ABC):
         self.pvs['ENABLE'] = builder.boolOut('ENABLE', 
                                               initial_value=1,
                                               on_update=lambda value: self._on_enable_changed(value))
+
+        # Create RUN PV
+        if self.mode == 'triggered':
+            # Button to trigger a one-shot run
+            self.pvs['RUN'] = builder.boolOut('RUN', 
+                                              initial_value=0,
+                                              on_update=lambda value: self._on_run_trigger(value))
+        else:
+            # Read-only indicator reflecting thread running state
+            self.pvs['RUN'] = builder.boolIn('RUN', initial_value=0)
+
+        # Cycle counter for continuous tasks
+        if self.mode == 'continuous':
+            self.pvs['CYCLE_COUNT'] = builder.longIn('CYCLE_COUNT', initial_value=0)
         
         # Create input PVs
         for pv_name, pv_config in self.pv_definitions.get('inputs', {}).items():
@@ -193,9 +218,18 @@ class TaskBase(ABC):
         
         # Set running flag
         self.running = True
+        # Reflect running state for continuous tasks
+        if self.mode == 'continuous' and 'RUN' in self.pvs:
+            try:
+                self.pvs['RUN'].set(1)
+            except Exception:
+                pass
         
-        # Start task execution in cothread
-        cothread.Spawn(self._run_wrapper)
+        # Start task execution loop only for continuous tasks
+        if self.mode == 'continuous':
+            cothread.Spawn(self._run_wrapper)
+        else:
+            self.logger.info("Triggered mode: no continuous run loop started. Use RUN to trigger execution.")
 
     def start_after_ioc(self):
         """Start the task assuming IOC is already initialized globally."""
@@ -206,9 +240,18 @@ class TaskBase(ABC):
 
         # Set running flag
         self.running = True
+        # Reflect running state for continuous tasks
+        if self.mode == 'continuous' and 'RUN' in self.pvs:
+            try:
+                self.pvs['RUN'].set(1)
+            except Exception:
+                pass
 
-        # Start task execution in cothread
-        cothread.Spawn(self._run_wrapper)
+        # Start task execution loop only for continuous tasks
+        if self.mode == 'continuous':
+            cothread.Spawn(self._run_wrapper)
+        else:
+            self.logger.info("Triggered mode: no continuous run loop started. Use RUN to trigger execution.")
     
     def _run_wrapper(self):
         """Wrapper for run method to handle exceptions."""
@@ -224,6 +267,12 @@ class TaskBase(ABC):
         
         # Set running flag to false
         self.running = False
+        # Reflect running state for continuous tasks
+        if self.mode == 'continuous' and 'RUN' in self.pvs:
+            try:
+                self.pvs['RUN'].set(0)
+            except Exception:
+                pass
         
         # Call task-specific cleanup
         self.cleanup()
@@ -318,10 +367,15 @@ class TaskBase(ABC):
         """Task-specific initialization. Must be implemented by subclasses."""
         pass
     
-    @abstractmethod
     def run(self):
-        """Task main execution loop. Must be implemented by subclasses."""
-        pass
+        """Default main execution loop for continuous tasks.
+
+        Subclasses should override for custom behavior. Triggered tasks typically
+        do not need a continuous run loop.
+        """
+        self.logger.info("Default run loop started (no-op). Override run() for custom behavior.")
+        while self.running and self.mode == 'continuous':
+            cothread.Sleep(0.5)
     
     @abstractmethod
     def cleanup(self):
@@ -337,3 +391,59 @@ class TaskBase(ABC):
             value: New value
         """
         pass
+
+    # --------------------
+    # Continuous helpers
+    # --------------------
+    def step_cycle(self):
+        """Increment cycle counter for continuous tasks and update PV."""
+        if self.mode != 'continuous':
+            return
+        self.cycle_count += 1
+        if 'CYCLE_COUNT' in self.pvs:
+            try:
+                self.pvs['CYCLE_COUNT'].set(int(self.cycle_count))
+            except Exception:
+                pass
+
+    # --------------------
+    # Triggered helpers
+    # --------------------
+    def _on_run_trigger(self, value: Any):
+        """Handle RUN button for triggered tasks."""
+        try:
+            pressed = bool(value)
+        except Exception:
+            pressed = False
+        if not pressed:
+            return
+        # Reset the button
+        try:
+            self.pvs['RUN'].set(0)
+        except Exception:
+            pass
+
+        # Launch one-shot execution if not already running a trigger
+        with self.task_lock:
+            if self._trigger_thread and self._trigger_thread.is_alive():
+                self.logger.warning("Trigger ignored: previous run still in progress")
+                return
+            self._trigger_thread = threading.Thread(target=self._trigger_wrapper, name=f"{self.name}-trigger")
+            self._trigger_thread.daemon = True
+            self._trigger_thread.start()
+
+    def _trigger_wrapper(self):
+        """Wrapper for triggered execution with error handling."""
+        self.logger.info("Triggered run started")
+        try:
+            self.triggered()
+            self.set_pv('STATUS', 'Triggered run completed')
+        except Exception as e:
+            self.logger.error(f"Error in triggered run: {e}", exc_info=True)
+            self.set_pv('STATUS', f"ERROR: {str(e)}")
+        finally:
+            self.logger.info("Triggered run finished")
+
+    def triggered(self):
+        """Override in subclasses to implement the one-shot action for triggered mode."""
+        self.logger.info("No triggered action implemented for this task")

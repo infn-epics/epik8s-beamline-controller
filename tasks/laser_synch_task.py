@@ -84,6 +84,8 @@ class LaserSynchTask(TaskBase):
             
             try:
                 self._process_cycle()
+                # increment cycle counter when active
+                self.step_cycle()
             except Exception as e:
                 self.logger.error(f"Error in processing cycle: {e}", exc_info=True)
                 self.set_pv('STATUS', f"ERROR: {str(e)}")
@@ -177,8 +179,6 @@ class LaserSynchTask(TaskBase):
         
         # Update status
         self.set_pv('STATUS', 'Running')
-        cycle_count = self.get_pv('CYCLE_COUNT') or 0
-        self.set_pv('CYCLE_COUNT', cycle_count + 1)
     
     def cleanup(self):
         """Cleanup when task stops."""

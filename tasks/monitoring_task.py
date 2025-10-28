@@ -42,6 +42,8 @@ class MonitoringTask(TaskBase):
             
             if enabled:
                 self._process_cycle()
+                # increment cycle counter when active
+                self.step_cycle()
             else:
                 self.logger.debug("Task disabled, skipping cycle")
             

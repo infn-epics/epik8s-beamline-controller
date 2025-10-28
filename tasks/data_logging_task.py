@@ -58,6 +58,8 @@ class DataLoggingTask(TaskBase):
             if enabled and time_since_last_log >= self.log_interval:
                 self._log_data()
                 self.last_log_time = current_time
+                # increment cycle counter when a log event occurs
+                self.step_cycle()
             
             # Sleep for a short time
             cothread.Sleep(0.5)
