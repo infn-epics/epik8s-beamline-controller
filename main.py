@@ -9,6 +9,8 @@ import argparse
 import logging
 import sys
 import os
+import subprocess
+import shutil
 from pathlib import Path
 from typing import Dict, List
 import yaml
@@ -55,6 +57,59 @@ class BeamlineController:
                 return yaml.safe_load(f)
         except Exception as e:
             self.logger.error(f"Failed to load {path}: {e}")
+            raise
+    
+    def _ensure_tasks_directory(self):
+        """Ensure tasks directory exists, clone from git if necessary."""
+        tasks_dir = Path(__file__).parent / 'tasks'
+        
+        if tasks_dir.exists() and tasks_dir.is_dir():
+            self.logger.info(f"Tasks directory found at {tasks_dir}")
+            return
+        
+        # Check if git repo config exists
+        tasksrepo = self.config.get('tasksrepo')
+        tasksrev = self.config.get('tasksrev', 'main')
+        
+        if not tasksrepo:
+            self.logger.error("Tasks directory not found and no 'tasksrepo' configured in config.yaml")
+            raise FileNotFoundError("Tasks directory not found and no git repository configured")
+        
+        self.logger.info(f"Tasks directory not found. Cloning from {tasksrepo} (branch/tag: {tasksrev})...")
+        
+        try:
+            # Create a temporary directory for cloning
+            temp_dir = Path(__file__).parent / 'temp_tasks_clone'
+            
+            # Remove temp directory if it exists
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            
+            # Clone the repository
+            cmd = ['git', 'clone', '--depth', '1', '-b', tasksrev, tasksrepo, str(temp_dir)]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            self.logger.debug(f"Git clone output: {result.stdout}")
+            
+            # Check if tasks directory exists in the cloned repo
+            cloned_tasks = temp_dir / 'tasks'
+            if cloned_tasks.exists() and cloned_tasks.is_dir():
+                # Move tasks directory to the correct location
+                shutil.move(str(cloned_tasks), str(tasks_dir))
+                self.logger.info(f"Tasks directory successfully cloned to {tasks_dir}")
+            else:
+                # If no tasks subdirectory, use the entire cloned repo as tasks
+                shutil.move(str(temp_dir), str(tasks_dir))
+                self.logger.info(f"Repository cloned as tasks directory to {tasks_dir}")
+            
+            # Clean up temp directory if it still exists
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+                
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"Failed to clone tasks repository: {e.stderr}")
+            raise
+        except Exception as e:
+            self.logger.error(f"Error setting up tasks directory: {e}", exc_info=True)
             raise
     
     def _load_task_class(self, task_name: str):
@@ -267,6 +322,9 @@ class BeamlineController:
     def run(self):
         """Main run loop."""
         try:
+            # Ensure tasks directory exists before initializing
+            self._ensure_tasks_directory()
+            
             self.initialize_ophyd_devices()
             self.initialize_tasks()
             self.start_tasks()
