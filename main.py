@@ -331,7 +331,7 @@ def main():
     setup_logging(args.log_level)
     
     # Create and run controller
-    controller = BeamlineController(args.config, args.values, args.pvout)
+    controller = BeamlineController(args.config, args.beamline, args.pvout)
     controller.run()
 
 
