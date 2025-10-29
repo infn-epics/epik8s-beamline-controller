@@ -3,6 +3,7 @@
 Base class for all beamline tasks with soft IOC integration using softioc library.
 """
 
+import datetime
 import logging
 import threading
 import time
@@ -108,13 +109,20 @@ class TaskBase(ABC):
         if self.mode == 'continuous':
             self.pvs['CYCLE_COUNT'] = builder.longIn('CYCLE_COUNT', initial_value=0)
         
-        # Create input PVs
+        # Create input PVs (skip reserved names: STATUS, MESSAGE, ENABLE, RUN, CYCLE_COUNT)
+        reserved_names = {'STATUS', 'MESSAGE', 'ENABLE', 'RUN', 'CYCLE_COUNT'}
         for pv_name, pv_config in self.pv_definitions.get('inputs', {}).items():
+            if pv_name in reserved_names:
+                self.logger.warning(f"Skipping reserved PV name in inputs: {pv_name}")
+                continue
             pv_obj = self._create_pv(pv_name, pv_config, is_output=True)  # Input to IOC is Out
             self.pvs[pv_name] = pv_obj
         
-        # Create output PVs
+        # Create output PVs (skip reserved names)
         for pv_name, pv_config in self.pv_definitions.get('outputs', {}).items():
+            if pv_name in reserved_names:
+                self.logger.warning(f"Skipping reserved PV name in outputs: {pv_name}")
+                continue
             pv_obj = self._create_pv(pv_name, pv_config, is_output=False)  # Output from IOC is In
             self.pvs[pv_name] = pv_obj
         
@@ -439,7 +447,15 @@ class TaskBase(ABC):
             value: New value
         """
         pass
-
+    ## get_datetime
+    def get_datetime(self) -> str:
+        """Get current date and time as string with millisecond precision."""
+        return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    
+    ## get_timems
+    def get_timems(self) -> int:
+        """Get current time in milliseconds since epoch."""
+        return int(time.time() * 1000)
     # --------------------
     # Continuous helpers
     # --------------------
@@ -453,7 +469,10 @@ class TaskBase(ABC):
                 self.pvs['CYCLE_COUNT'].set(int(self.cycle_count))
             except Exception:
                 pass
-
+    ## get_cycle_count
+    def get_cycle(self) -> int:
+        """Get current cycle count."""
+        return self.cycle_count
     # --------------------
     # Triggered helpers
     # --------------------

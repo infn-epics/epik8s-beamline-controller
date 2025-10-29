@@ -236,9 +236,36 @@ For example, with SPARC beamline:
 
 ## Built-in PVs
 
-Every task automatically has:
+Every task automatically has these standard PVs:
 
-- **ENABLE**: Enum (DISABLED/ENABLED) - Control task execution
+- **ENABLE**: Boolean (0/1) - Enable/disable task execution
+- **STATUS**: Multistate (INIT/RUN/PAUSED/END/ERROR) - Current task state
+- **MESSAGE**: String - Status messages and error descriptions
+- **CYCLE_COUNT**: Integer - Execution cycle counter (continuous tasks only)
+- **RUN**: Boolean button - Trigger execution (triggered tasks only)
+
+**Note**: These PV names are reserved and should not be defined in your task's `pvs.inputs` or `pvs.outputs` configuration.
+
+## Generating OPI/BOB Display
+
+The project includes a script to automatically generate CS-Studio BOY/Phoebus display files from your configuration:
+
+```bash
+# Generate OPI from default config
+python generate_opi.py
+
+# Specify custom config and output
+python generate_opi.py --config my_config.yaml --values my_values.yaml --output my_display.bob
+```
+
+The generated display includes:
+- Enable buttons for each task
+- Status indicators showing current state
+- Cycle counters (for continuous tasks)
+- Trigger buttons (for triggered tasks)
+- Message displays showing task status/errors
+
+After running the script, open `test.bob` in Phoebus or CS-Studio to monitor and control your tasks.
 
 ## PV Types
 

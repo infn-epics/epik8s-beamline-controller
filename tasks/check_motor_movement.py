@@ -22,35 +22,32 @@ class CheckMotorMovement(TaskBase):
         
         # Get task parameters
         self.update_rate = self.parameters.get('update_rate', 1.0)
-        self.motor_names = self.parameters.get('motor_names', [])
-        
+        self.motors_list = self.parameters.get('motors', [])
+        self.switchoff_names = self.parameters.get('switchoff', [])
         # Get motor devices from Ophyd devices
         self.motors = {}
-        if not self.motor_names:
-            self.logger.warning("No motor_names provided; task will not monitor any motors.")
+        self.switches={}
+        if not self.motors_list:
+            self.logger.warning("No motors provided; task will not monitor any motors.")
         else:
             # Expand names: allow passing IOC/group prefixes like 'tml-ch1' to match all devices with that prefix
             all_devices = self.list_devices()
-            for requested in self.motor_names:
+            for requested in self.motors_list:
                 # Direct exact match first
                 dev = self.get_device(requested)
                 if dev:
                     self.motors[requested] = dev
                     self.logger.info(f"Found motor device: {requested}")
                     continue
+            ## found switchoff devices
+            for requested in self.switchoff_names:
+                dev = self.get_device(requested)
+                if dev:
+                    self.switches[requested] = dev
+                    self.logger.info(f"Found switchoff device: {requested}")
+                    continue
 
-                # Treat as prefix (e.g., 'tml-ch1' -> 'tml-ch1_*')
-                prefix = f"{requested}_"
-                matched = [name for name in all_devices if name.startswith(prefix)]
-                if matched:
-                    for name in matched:
-                        dev = self.get_device(name)
-                        if dev:
-                            self.motors[name] = dev
-                    self.logger.info(f"Expanded '{requested}' to {len(matched)} devices: {matched}")
-                else:
-                    self.logger.warning(f"Ophyd device {requested} not found and no devices matched prefix '{prefix}'")
-        
+              
         if not self.motors:
             self.logger.warning("No motor devices found!")
         
@@ -67,7 +64,15 @@ class CheckMotorMovement(TaskBase):
     
     def motor_moved_callback(self, motor_name: str, position: Any):
         """Normalized motor movement callback: called with motor name and new position."""
-        self.logger.info(f"Motor {motor_name} moved to position {position}")
+        if self.get_cycle() > 10:
+            self.logger.info(f"Motor {motor_name} moved to position {position}")
+            for sw_name, sw in self.switches.items():
+                try:
+                    sw.set(1)
+                    self.logger.info(f"Switchoff device {sw_name} set to 1 due to motor movement.")
+                except Exception as e:
+                    self.logger.error(f"Error setting switchoff device {sw_name}: {e}")
+
 
     def make_user_readback_callback(self, motor_name: str):
         """Adapter: map user_readback (timestamp, value, **kwargs) to motor_moved_callback."""
@@ -98,7 +103,8 @@ class CheckMotorMovement(TaskBase):
                 self.step_cycle()
             except Exception as e:
                 self.logger.error(f"Error in processing cycle: {e}", exc_info=True)
-                self.set_pv('STATUS', f"ERROR: {str(e)}")
+                self.set_status('ERROR')
+                self.set_message(f"Error: {str(e)}")
             
             # Sleep based on update rate
             cothread.Sleep(1.0 / self.update_rate)
@@ -151,14 +157,17 @@ class CheckMotorMovement(TaskBase):
                 pv_moving = f"{motor_name}_MOVING"
                 if pv_moving in self.pvs:
                     self.set_pv(pv_moving, int(is_moving))
-                
+
+                self.set_pv("MOVING", int(is_moving))
+
             except Exception as e:
                 self.logger.error(f"Error monitoring {motor_name}: {e}")
     
     def cleanup(self):
         """Cleanup when task stops."""
         self.logger.info("Cleaning up motor control task")
-        self.set_pv('STATUS', 'Stopped')
+        self.set_status('END')
+        self.set_message('Stopped')
     
     def handle_pv_write(self, pv_name: str, value: Any):
         """

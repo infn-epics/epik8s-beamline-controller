@@ -45,9 +45,6 @@ tasks:
         SAMPLE_COUNT:
           type: int
           value: 0
-        STATUS:
-          type: string
-          value: "Initialized"
 
   # Example data logging task
   # - name: "logger_01"
@@ -83,9 +80,6 @@ tasks:
   #       LAST_LOG_TIME:
   #         type: string
   #         value: "Never"
-  #       STATUS:
-  #         type: string
-  #         value: "Initialized"
 
   # You can add more tasks here following the same pattern
   # - name: "your_task_name"
@@ -111,10 +105,33 @@ tasks:
       update_rate: 2.0  # Hz
       # List of motor device names from values.yaml IOCs
       # Format: "ioc_name" or "ioc_name_device_name" for multi-device IOCs
-      motor_names:
-        - "tml-ch1"  # Example: matches IOC name from values.yaml
-        - "tml-ch2"
-        - "tml-ch3"
+      motors:
+        - "GUNFLG01"
+        - "AC1FLG01"
+        - "AC2FLG01"
+        - "AC3FLG01"
+        - "UTLFLG01"
+        - "UTLFLG02"
+        - "SBNFLG00"
+        - "SBNFLG01"
+        - "GUNSOLH1"
+        - "GUNSOLV1"
+        - "CMBROH01"
+        - "CMBEOS01"
+        - "CMBTHV01"
+        - "CMBPQH02"
+        - "CMBPQH01"
+        - "CMBPQV01"
+        - "CMBPQV02"
+        - "CMBPLV01"
+        - "CMBROV01"
+        - "CMBTHR01"
+        - "CMBTRH01"
+       
+      switchoff:
+        - "CATLAS01"
+        - "EOSLAS01"
+
     pvs:
       outputs:
         MOVING:

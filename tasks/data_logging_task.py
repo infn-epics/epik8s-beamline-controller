@@ -91,12 +91,14 @@ class DataLoggingTask(TaskBase):
             
         except Exception as e:
             self.logger.error(f"Error logging data: {e}", exc_info=True)
-            self.set_pv('STATUS', f"ERROR: {str(e)}")
+            self.set_status('ERROR')
+            self.set_message(f"Error: {str(e)}")
     
     def cleanup(self):
         """Cleanup when task stops."""
         self.logger.info("Cleaning up data logging task")
-        self.set_pv('STATUS', 'Stopped')
+        self.set_status('END')
+        self.set_message('Stopped')
         self.logger.info(f"Total log entries: {self.log_count}")
     
     def handle_pv_write(self, pv_name: str, value: Any):

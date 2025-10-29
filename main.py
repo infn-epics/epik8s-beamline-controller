@@ -128,9 +128,18 @@ class BeamlineController:
                         )
                         
                         if ophyd_device:
-                            device_key = f"{ioc_name}_{device_name}"
+                            device_key = f"{device_name}"
+                            ## check if device_key already exists
+                            if device_key in self.ophyd_devices:
+                                d= f"{ioc_name}_{device_name}"
+                                self.logger.warning(f"Device key '{device_key}' already exists, renaming to avoid conflict: {d}")
+                                if d in self.ophyd_devices:
+                                    self.logger.error(f"Renamed device key '{d}' also exists. Skipping device creation for {device_name} in IOC {ioc_name}.")
+                                    continue
+                                device_key = d
+
                             self.ophyd_devices[device_key] = ophyd_device
-                            self.logger.info(f"Created Ophyd device: {device_key} ({devgroup}/{devtype})")
+                            self.logger.info(f"Created Ophyd device: {device_key} ({ioc_name}/{devgroup}/{devtype})")
                 else:
                     # Single device IOC
                     pv_prefix = f"{beamline}:{namespace}:{ioc_prefix}"

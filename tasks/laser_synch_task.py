@@ -88,7 +88,8 @@ class LaserSynchTask(TaskBase):
                 self.step_cycle()
             except Exception as e:
                 self.logger.error(f"Error in processing cycle: {e}", exc_info=True)
-                self.set_pv('STATUS', f"ERROR: {str(e)}")
+                self.set_status('ERROR')
+                self.set_message(f"Error: {str(e)}")
             
             # Sleep for loop period
             cothread.Sleep(self.loop_period)
@@ -177,8 +178,8 @@ class LaserSynchTask(TaskBase):
                 caput(f"{self.prefix_motor}:m0.RLV", str(step))
                 self.logger.debug(f"Tracking: moving motor by {step}")
         
-        # Update status
-        self.set_pv('STATUS', 'Running')
+        # Update message with status
+        self.set_message(f"PLL:{'ON' if pll_on else 'OFF'} Track:{'ON' if tracking_on else 'OFF'}")
     
     def cleanup(self):
         """Cleanup when task stops."""
@@ -191,7 +192,8 @@ class LaserSynchTask(TaskBase):
             except Exception as e:
                 self.logger.error(f"Error turning off PLL: {e}")
         
-        self.set_pv('STATUS', 'Stopped')
+        self.set_status('END')
+        self.set_message('Stopped')
     
     def handle_pv_write(self, pv_name: str, value: Any):
         """

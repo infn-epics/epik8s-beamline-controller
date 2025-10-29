@@ -77,20 +77,21 @@ class MonitoringTask(TaskBase):
             self.sample_count += 1
             self.set_pv('SAMPLE_COUNT', self.sample_count)
             
-            # Update status
-            status_msg = f"Processed {self.sample_count} samples"
-            self.set_pv('STATUS', status_msg)
+            # Update status and message
+            self.set_message(f"Processed {self.sample_count} samples")
             
             self.logger.debug(f"Cycle {self.sample_count}: result={result:.3f}")
             
         except Exception as e:
             self.logger.error(f"Error in processing cycle: {e}", exc_info=True)
-            self.set_pv('STATUS', f"ERROR: {str(e)}")
+            self.set_status('ERROR')
+            self.set_message(f"Error: {str(e)}")
     
     def cleanup(self):
         """Cleanup when task stops."""
         self.logger.info("Cleaning up monitoring task")
-        self.set_pv('STATUS', 'Stopped')
+        self.set_status('END')
+        self.set_message('Stopped')
     
     def handle_pv_write(self, pv_name: str, value: Any):
         """

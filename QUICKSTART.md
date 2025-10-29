@@ -12,7 +12,13 @@
    python main.py
    ```
 
-3. **Test the PVs** (in another terminal):
+3. **Generate OPI display** (optional):
+   ```bash
+   python generate_opi.py
+   # Opens test.bob in Phoebus/CS-Studio to monitor tasks
+   ```
+
+4. **Test the PVs** (in another terminal):
    ```bash
    # List all PVs
    caget SPARC:SPARC:MONITOR_01:ENABLE
