@@ -10,7 +10,7 @@
             "args": [
                 "--config",
                 "tests/test-config.yaml",
-                "--values",
+                "--beamline",
                 "tests/sparc-beamline.yaml"
             ],
             "cwd": "${workspaceFolder}",
@@ -30,7 +30,7 @@
             "args": [
                 "--config",
                 "tests/config.yaml",
-                "--values",
+                "--beamline",
                 "tests/sparc-beamline.yaml",
                 "--log-level",
                 "INFO"
@@ -52,7 +52,7 @@
             "args": [
                 "--config",
                 "${input:configFile}",
-                "--values",
+                "--beamline",
                 "${input:valuesFile}",
                 "--log-level",
                 "${input:logLevel}"
@@ -72,7 +72,7 @@
             "args": [
                 "--config",
                 "config.yaml",
-                "--values",
+                "--beamline",
                 "${workspaceFolder}/../epik8-sparc/deploy/values.yaml",
                 "--log-level",
                 "INFO"

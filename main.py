@@ -306,10 +306,10 @@ def main():
         help='Path to config.yaml'
     )
     parser.add_argument(
-        '--values',
+        '--beamline',
         type=str,
         default='values.yaml',
-        help='Path to values.yaml (beamline configuration)'
+        help='Path to yaml beamline configuration'
     )
     parser.add_argument(
         '--log-level',
