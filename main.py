@@ -8,6 +8,7 @@ Creates Ophyd device instances for each IOC/device defined in values.yaml.
 import argparse
 import logging
 import sys
+import os
 from pathlib import Path
 from typing import Dict, List
 import yaml
@@ -22,17 +23,19 @@ from ophyd_device_factory import OphydDeviceFactory
 class BeamlineController:
     """Main controller for beamline tasks."""
     
-    def __init__(self, config_path: str, values_path: str):
+    def __init__(self, config_path: str, values_path: str, pvout_path: str = 'pvlist.txt'):
         """
         Initialize the beamline controller.
         
         Args:
             config_path: Path to config.yaml
             values_path: Path to values.yaml (beamline configuration)
+            pvout_path: Path to output PV list file
         """
         self.logger = logging.getLogger(__name__)
         self.config_path = config_path
         self.values_path = values_path
+        self.pvout_path = pvout_path
         
         # Load configurations
         self.config = self._load_yaml(config_path)
@@ -227,6 +230,15 @@ class BeamlineController:
             softioc.iocInit()
             self.logger.info("IOC initialized")
             softioc.dbl()
+            
+            # Write PV list to file
+            self.logger.info(f"Writing PV list to {self.pvout_path}")
+            with open(self.pvout_path, "w") as f:
+                old_stdout = os.dup(1)
+                os.dup2(f.fileno(), 1)
+                softioc.dbl()
+                os.dup2(old_stdout, 1)
+                os.close(old_stdout)
         except Exception as e:
             self.logger.error(f"IOC initialization failed: {e}", exc_info=True)
             raise
@@ -306,6 +318,12 @@ def main():
         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
         help='Logging level'
     )
+    parser.add_argument(
+        '--pvout',
+        type=str,
+        default='pvlist.txt',
+        help='Output PV list file'
+    )
     
     args = parser.parse_args()
     
@@ -313,7 +331,7 @@ def main():
     setup_logging(args.log_level)
     
     # Create and run controller
-    controller = BeamlineController(args.config, args.values)
+    controller = BeamlineController(args.config, args.values, args.pvout)
     controller.run()
 
 

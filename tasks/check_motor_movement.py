@@ -68,8 +68,8 @@ class CheckMotorMovement(TaskBase):
             self.logger.info(f"Motor {motor_name} moved to position {position}")
             for sw_name, sw in self.switches.items():
                 try:
-                    sw.set(1)
-                    self.logger.info(f"Switchoff device {sw_name} set to 1 due to motor movement.")
+                    sw.set(0)
+                    self.logger.info(f"Switchoff device {sw_name} set to 0 (CLOSE) due to motor movement.")
                 except Exception as e:
                     self.logger.error(f"Error setting switchoff device {sw_name}: {e}")
 
