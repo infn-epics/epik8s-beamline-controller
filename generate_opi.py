@@ -360,10 +360,10 @@ def main():
         help='Path to config.yaml file (default: tests/test-config.yaml)'
     )
     parser.add_argument(
-        '--values',
+        '--beamline',
         type=str,
         default='tests/sparc-beamline.yaml',
-        help='Path to values.yaml file (default: tests/sparc-beamline.yaml)'
+        help='Path to beamline.yaml file (default: tests/sparc-beamline.yaml)'
     )
     parser.add_argument(
         '--output',
@@ -381,7 +381,7 @@ def main():
     
     # Generate BOB file
     try:
-        generate_bob(args.config, args.values, args.output)
+        generate_bob(args.config, args.beamline, args.output)
         return 0
     except Exception as e:
         print(f"Error generating OPI: {e}")
