@@ -159,12 +159,13 @@ class BeamlineController:
             
             # Get IOC prefix for PV construction
             ioc_prefix = ioc_config.get('iocprefix', '')
+            
             beamline = self.beamline_values.get('beamline', 'BEAMLINE').upper()
             namespace = self.beamline_values.get('namespace', 'DEFAULT').upper()
             
             # Get devices list (for IOCs with multiple devices)
             devices = ioc_config.get('devices', [])
-            
+            iocname=ioc_config.get('name', "")
             try:
                 if devices:
                     # Create Ophyd instance for each device
@@ -172,17 +173,22 @@ class BeamlineController:
                         device_name = device_config.get('name')
                         if not device_name:
                             continue
-                        
+                        if 'iocroot' in ioc_config:
+                            pv_prefix = f"{ioc_prefix}:{ioc_config['iocroot']}:{device_name}"
+                        else:
+                            pv_prefix = f"{ioc_prefix}:{device_name}"
+
                         # Construct full PV prefix
-                        pv_prefix = f"{ioc_prefix}:{device_name}"
-                        
+                        myconfig = ioc_config.copy()
+                        myconfig['iocname']=iocname
+                        myconfig.update(device_config)
                         # Create Ophyd device
                         ophyd_device = self.ophyd_factory.create_device(
                             devgroup=devgroup,
                             devtype=devtype,
                             prefix=pv_prefix,
                             name=device_name,
-                            config=device_config
+                            config=myconfig
                         )
                         
                         if ophyd_device:
@@ -197,10 +203,10 @@ class BeamlineController:
                                 device_key = d
 
                             self.ophyd_devices[device_key] = ophyd_device
-                            self.logger.info(f"Created Ophyd device: {device_key} ({ioc_name}/{devgroup}/{devtype})")
+                            self.logger.info(f"Created Ophyd device: {device_key} ({ioc_name}/{devgroup}/{devtype} prefix={pv_prefix})")
                 else:
                     # Single device IOC
-                    pv_prefix = f"{beamline}:{namespace}:{ioc_prefix}"
+                    pv_prefix = f"{ioc_prefix}"
                     
                     # Create Ophyd device
                     ophyd_device = self.ophyd_factory.create_device(

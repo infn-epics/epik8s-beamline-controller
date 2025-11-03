@@ -1,9 +1,10 @@
 # Beamline Controller Configuration
 # This file defines the tasks to run and their configurations
 
-prefix: "SPARC:CONTROL"
+prefix: "SPARC:CONTROL2"
 tasksrepo: "https://github.com/infn-epics/sparc-beamline-controller-tasks.git"
 tasksrev: "main"
+
 # List of tasks to execute
 tasks:
   # Example monitoring task

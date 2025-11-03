@@ -109,6 +109,7 @@ class OphydDeviceFactory:
             kwargs = {
                 'prefix': prefix,
                 'name': name,
+                'config': config
             }
             
             # Add POI (Points of Interest) for motors if available

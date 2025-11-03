@@ -19,5 +19,4 @@ infn_ophyd_hal>=1.12.0
 # Logging and utilities
 python-dateutil>=2.8.0
 
-# Numpy for data processing
-numpy>=1.21.0
+kubernetes

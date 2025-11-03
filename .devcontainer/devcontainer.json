@@ -7,7 +7,7 @@
     //         "TARGET_ARCHITECTURE": "linux"
     //     }
     // },
-    "image": "baltig.infn.it:4567/epics-containers/epics-py-base",
+    "image": "python:3.11-slim",
     "remoteEnv": {
         // allows X11 apps to run inside the container
         "DISPLAY": "${localEnv:DISPLAY}",
