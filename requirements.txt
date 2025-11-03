@@ -14,7 +14,7 @@ PyYAML>=6.0
 ophyd>=1.6.0
 
 # INFN Ophyd HAL (if available locally, otherwise install from source)
-infn_ophyd_hal>=1.12.0
+infn_ophyd_hal>=2.11.3
 
 # Logging and utilities
 python-dateutil>=2.8.0
