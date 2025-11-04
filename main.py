@@ -19,8 +19,7 @@ import cothread
 
 from task_base import TaskBase
 from softioc import softioc, builder
-from ophyd_device_factory import OphydDeviceFactory
-
+from infn_ophyd_hal.device_factory import DeviceFactory
 __version__ = "1.0.0"
 
 
@@ -50,7 +49,7 @@ class BeamlineController:
         self.prefix = self.config.get('prefix', 'BEAMLINE:CONTROL')
         # Ophyd device management
         self.ophyd_devices: Dict[str, object] = {}
-        self.ophyd_factory = OphydDeviceFactory()
+        self.ophyd_factory = DeviceFactory()
         self.logger.info(f"BeamlineController {__version__} initialized")
         
     def _load_yaml(self, path: str) -> Dict:
