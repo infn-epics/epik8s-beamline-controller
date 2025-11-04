@@ -232,8 +232,20 @@ class BeamlineController:
         """Initialize all tasks from configuration."""
         self.logger.info("Initializing tasks...")
         
-        task_configs = self.config.get('tasks', {})
+        task_configs = self.config.get('tasks', [])
+        from iocmng_task import IocMngTask
         
+        # Always include IOC Manager task
+        ioc_manager_task = IocMngTask(
+            name="ioc_manager",
+            parameters={},
+            pv_definitions={},
+            beamline_config=self.beamline_values,
+            ophyd_devices=self.ophyd_devices,
+            prefix=self.prefix
+        )
+        self.tasks.append(ioc_manager_task)
+
         for task_config in task_configs:
             task_name = task_config.get('name')
             task_module = task_config.get('module')
