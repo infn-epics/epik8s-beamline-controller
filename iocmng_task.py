@@ -10,6 +10,8 @@ for each IOC (sync status, health status, timestamps, and START/STOP/RESTART con
 import cothread
 import time
 import threading
+import os
+from urllib3.exceptions import MaxRetryError, ProxyError
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 from task_base import TaskBase
@@ -74,6 +76,10 @@ class IocMngTask(TaskBase):
         # Control action queue
         self.control_queue = []
         self.control_lock = threading.Lock()
+    # Kubernetes network/proxy helpers
+    self._k8s_proxy_disabled = False
+    self._k8s_saved_proxy_env = {}
+    self._k8s_last_proxy_error_time = 0
 
     def initialize(self):
         """Initialize the IOC status monitoring task."""
@@ -98,7 +104,45 @@ class IocMngTask(TaskBase):
         # Get devgroups and IOCs from beamline config
         self._parse_beamline_config()
 
+        # Kubernetes network/proxy helpers
+        self._k8s_proxy_disabled = False
+        self._k8s_saved_proxy_env = {}
+        self._k8s_last_proxy_error_time = 0
         # Initialize Kubernetes client
+    def _disable_k8s_proxy_env(self):
+        """Temporarily remove proxy environment variables to allow direct in-cluster API access."""
+        try:
+            if getattr(self, "_k8s_proxy_disabled", False):
+                return
+            proxy_vars = [
+                "HTTP_PROXY",
+                "HTTPS_PROXY",
+                "http_proxy",
+                "https_proxy",
+                "ALL_PROXY",
+                "all_proxy",
+            ]
+            for pv in proxy_vars:
+                if pv in os.environ:
+                    self._k8s_saved_proxy_env[pv] = os.environ.pop(pv)
+            self._k8s_proxy_disabled = True
+            self.logger.info("Disabled proxy environment variables for in-cluster Kubernetes access")
+        except Exception as e:
+            self.logger.debug(f"Failed to modify proxy env vars: {e}")
+
+    def _restore_k8s_proxy_env(self):
+        """Restore proxy environment variables previously removed."""
+        try:
+            if not getattr(self, "_k8s_proxy_disabled", False):
+                return
+            for k, v in (self._k8s_saved_proxy_env or {}).items():
+                os.environ[k] = v
+            self._k8s_saved_proxy_env = {}
+            self._k8s_proxy_disabled = False
+            self.logger.info("Restored proxy environment variables after Kubernetes access")
+        except Exception as e:
+            self.logger.debug(f"Failed to restore proxy env vars: {e}")
+
         try:
             # Try in-cluster config first
             k8s_config.load_incluster_config()
@@ -141,6 +185,13 @@ class IocMngTask(TaskBase):
             if isinstance(ioc_data, dict):
                 devgroup = ioc_data.get("devgroup", "default")
             else:
+        # If running in-cluster, disable proxy environment variables so urllib3 does not try to tunnel via proxy
+        if use_incluster:
+            try:
+                self._disable_k8s_proxy_env()
+            except Exception:
+                # Non-fatal
+                pass
                 devgroup = "default"
 
             if devgroup not in self.devgroups:
@@ -205,6 +256,10 @@ class IocMngTask(TaskBase):
             initial_value=2,
             ZRST="Synced",
             ONST="OutOfSync",
+        try:
+            self._restore_k8s_proxy_env()
+        except Exception:
+            pass
             TWST="Unknown",
             THST="Error",
         )
