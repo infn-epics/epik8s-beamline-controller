@@ -27,7 +27,7 @@ except ImportError:
     print("Warning: kubernetes library not available. IocStatusTask will not function.")
 
 
-class IocMngTask(TaskBase):
+class IocmngTask(TaskBase):
     """
     Task that monitors ArgoCD applications for IOC status.
 
@@ -44,6 +44,13 @@ class IocMngTask(TaskBase):
       - START: Sync the application
       - STOP: Suspend the application
       - RESTART: Hard restart (delete and recreate)
+
+    Configuration Parameters:
+    - update_rate: Update frequency in Hz (default: 0.05)
+    - argocd_namespace: ArgoCD namespace (default: "argocd")
+    - kubeconfig_path: Path to kubeconfig file (for out-of-cluster usage)
+    - kube_context: Specific kubeconfig context to use
+    - api_server: Kubernetes API server endpoint (for custom endpoints)
     """
 
     def __init__(
@@ -68,6 +75,7 @@ class IocMngTask(TaskBase):
         self.devgroups = {}  # devgroup -> list of IOC names
         self.ioc_status = {}  # ioc_name -> status dict
         self.ioc_pvs = {}  # ioc_name -> dict of PV objects
+        self.ioc_to_app_name = {}  # ioc_name -> ArgoCD application name mapping
 
         # Status tracking for change detection
         self.last_health_status = {}  # ioc_name -> health status
@@ -99,6 +107,15 @@ class IocMngTask(TaskBase):
         )  # Hz (default: every 2 seconds)
         self.argocd_namespace = self.parameters.get("argocd_namespace", "argocd")
 
+        # Kubernetes connection parameters for development/out-of-cluster usage
+        self.kubeconfig_path = self.parameters.get(
+            "kubeconfig_path"
+        )  # Path to kubeconfig file
+        self.kube_context = self.parameters.get(
+            "kube_context"
+        )  # Specific context to use
+        self.api_server = self.parameters.get("api_server")  # API server endpoint
+
         # Get namespace from beamline config
         self.k8s_namespace = self.beamline_config.get("namespace", "default")
 
@@ -118,8 +135,32 @@ class IocMngTask(TaskBase):
         except Exception as e:
             self.logger.warning(f"Could not load in-cluster config: {e}")
             try:
-                # Fall back to kubeconfig
-                k8s_config.load_kube_config()
+                # Fall back to kubeconfig with custom parameters
+                if self.kubeconfig_path:
+                    self.logger.info(f"Loading kubeconfig from: {self.kubeconfig_path}")
+                    k8s_config.load_kube_config(
+                        config_file=self.kubeconfig_path, context=self.kube_context
+                    )
+                else:
+                    k8s_config.load_kube_config(context=self.kube_context)
+
+                # Override API server if specified
+                if self.api_server:
+                    # Create custom configuration
+                    configuration = client.Configuration()
+                    configuration.host = self.api_server
+                    # Copy other settings from loaded config
+                    loaded_config = k8s_config.load_kube_config(
+                        config_file=self.kubeconfig_path, context=self.kube_context
+                    )
+                    if loaded_config:
+                        configuration.api_key = loaded_config.api_key
+                        configuration.ssl_ca_cert = loaded_config.ssl_ca_cert
+                        configuration.cert_file = loaded_config.cert_file
+                        configuration.key_file = loaded_config.key_file
+                    client.Configuration.set_default(configuration)
+                    self.logger.info(f"Using custom API server: {self.api_server}")
+
                 self.logger.info("Loaded Kubernetes configuration from kubeconfig")
             except Exception as e2:
                 self.logger.error(f"Could not load Kubernetes configuration: {e2}")
@@ -179,15 +220,46 @@ class IocMngTask(TaskBase):
 
     def _parse_beamline_config(self):
         """Parse beamline configuration to extract devgroups and IOCs."""
-        # Look for 'iocs' section in beamline_config
-        iocs_config = self.beamline_config.get("iocs", {})
+        # Look for IOCs in common locations. Support both formats:
+        # 1) Top-level mapping: beamline_config['iocs'] -> {ioc_name: {...}}
+        # 2) Epics configuration list: beamline_config['epicsConfiguration']['iocs'] -> [{name: ..., ...}, ...]
+        iocs_config = self.beamline_config.get("iocs")
+        if iocs_config is None:
+            epics_conf = self.beamline_config.get("epicsConfiguration", {})
+            if isinstance(epics_conf, dict):
+                iocs_config = epics_conf.get("iocs")
 
         if not iocs_config:
-            self.logger.warning("No 'iocs' section found in beamline configuration")
+            self.logger.warning(
+                "No 'iocs' section found in beamline configuration (checked 'iocs' and 'epicsConfiguration.iocs')"
+            )
             return
 
-        # Group IOCs by devgroup
-        for ioc_name, ioc_data in iocs_config.items():
+        # Normalize to an iterable of (ioc_name, ioc_data) pairs
+        items = None
+        if isinstance(iocs_config, dict):
+            items = list(iocs_config.items())
+        elif isinstance(iocs_config, list):
+            items = []
+            for entry in iocs_config:
+                if isinstance(entry, dict):
+                    name = entry.get("name")
+                    if not name:
+                        self.logger.debug(f"Skipping IOC entry without name: {entry}")
+                        continue
+                    items.append((name, entry))
+                elif isinstance(entry, str):
+                    items.append((entry, {}))
+                else:
+                    self.logger.debug(
+                        f"Skipping unsupported IOC entry type {type(entry)}: {entry}"
+                    )
+        else:
+            self.logger.warning("Unsupported 'iocs' format in beamline configuration")
+            return
+
+        # Group IOCs by devgroup and initialize status
+        for ioc_name, ioc_data in items:
             if isinstance(ioc_data, dict):
                 devgroup = ioc_data.get("devgroup", "default")
             else:
@@ -198,6 +270,10 @@ class IocMngTask(TaskBase):
 
             self.devgroups[devgroup].append(ioc_name)
 
+            # Build ArgoCD application name: <namespace>-<iocname>-ioc
+            argocd_app_name = f"{self.k8s_namespace}-{ioc_name}-ioc"
+            self.ioc_to_app_name[ioc_name] = argocd_app_name
+
             # Initialize IOC status
             self.ioc_status[ioc_name] = {
                 "app_status": "Unknown",
@@ -206,16 +282,33 @@ class IocMngTask(TaskBase):
                 "last_sync_time": "Never",
                 "last_health_change": "Never",
                 "devgroup": devgroup,
+                "argocd_app_name": argocd_app_name,
             }
 
         self.logger.info(
             f"Found {len(self.devgroups)} devgroups with {len(self.ioc_status)} IOCs total"
         )
+        self.logger.debug(f"IOC to ArgoCD app mapping: {self.ioc_to_app_name}")
 
     def _create_ioc_pvs(self):
         """Create PVs for devgroups and individual IOCs using softioc builder."""
         # Set device name prefix
         builder.SetDeviceName(self.pv_prefix)
+
+        # Summary counters PVs (total / healthy / progressing / other)
+        # These are long integer read-only PVs updated each cycle by the task
+        try:
+            self.pvs["TOTAL_IOCS"] = builder.longIn(
+                "TOTAL_IOCS", initial_value=len(self.ioc_status)
+            )
+            self.pvs["HEALTHY_COUNT"] = builder.longIn("HEALTHY_COUNT", initial_value=0)
+            self.pvs["PROGRESSING_COUNT"] = builder.longIn(
+                "PROGRESSING_COUNT", initial_value=0
+            )
+            self.pvs["OTHER_COUNT"] = builder.longIn("OTHER_COUNT", initial_value=0)
+        except Exception:
+            # If builder is not available or PV creation fails, continue gracefully
+            self.logger.debug("Failed to create summary count PVs", exc_info=True)
 
         # Create waveform PVs for each devgroup
         for devgroup, ioc_list in self.devgroups.items():
@@ -224,9 +317,11 @@ class IocMngTask(TaskBase):
             # Create a waveform of strings (char waveform with max length)
             # Join IOC names with commas
             ioc_list_str = ",".join(ioc_list)
-            max_len = max(len(ioc_list_str) + 100, 1000)  # Allow room for growth
-
-            pv = builder.WaveformIn(pv_name, initial_value=ioc_list_str, length=max_len)
+            max_len = len(ioc_list_str)
+            self.logger.debug(
+                f"Creating devgroup PV: {pv_name} with {len(ioc_list)} IOCs max_len={max_len}"
+            )
+            pv = builder.WaveformIn(pv_name, initial_value=ioc_list, length=max_len)
             self.pvs[pv_name] = pv
 
             self.logger.info(
@@ -240,6 +335,23 @@ class IocMngTask(TaskBase):
     def _create_ioc_specific_pvs(self, ioc_name: str):
         """Create status and control PVs for a specific IOC."""
         ioc_prefix = ioc_name.upper().replace("-", "_")
+
+        # EPICS record name limit is 60 characters (some implementations allow 61-63)
+        # We need to account for: PREFIX:TASK_NAME:IOC_PREFIX_PV_SUFFIX
+        # Reserve space for the longest suffix and separators
+        max_record_length = 60
+        prefix_overhead = len(self.pv_prefix) + 1  # +1 for separator
+        longest_suffix = len("_LAST_HEALTH")  # Longest PV suffix
+        max_ioc_prefix_len = max_record_length - prefix_overhead - longest_suffix
+
+        # Truncate IOC prefix if necessary
+        if len(ioc_prefix) > max_ioc_prefix_len:
+            original_prefix = ioc_prefix
+            ioc_prefix = ioc_prefix[:max_ioc_prefix_len]
+            self.logger.warning(
+                f"IOC prefix '{original_prefix}' truncated to '{ioc_prefix}' "
+                f"(max {max_ioc_prefix_len} chars) to fit EPICS 60-char record name limit"
+            )
 
         ioc_pv_dict = {}
 
@@ -273,12 +385,12 @@ class IocMngTask(TaskBase):
         )
 
         # Timestamps
-        ioc_pv_dict["LAST_SYNC_TIME"] = builder.stringIn(
-            f"{ioc_prefix}_LAST_SYNC_TIME", initial_value="Never"
+        ioc_pv_dict["LAST_SYNC"] = builder.stringIn(
+            f"{ioc_prefix}_LAST_SYNC", initial_value="Never"
         )
 
-        ioc_pv_dict["LAST_HEALTH_CHANGE"] = builder.stringIn(
-            f"{ioc_prefix}_LAST_HEALTH_CHANGE", initial_value="Never"
+        ioc_pv_dict["LAST_HEALTH"] = builder.stringIn(
+            f"{ioc_prefix}_LAST_HEALTH", initial_value="Never"
         )
 
         # Control PVs (writable buttons)
@@ -365,6 +477,26 @@ class IocMngTask(TaskBase):
             healthy_count = sum(
                 1 for s in self.ioc_status.values() if s["health_status"] == "Healthy"
             )
+            progressing_count = sum(
+                1
+                for s in self.ioc_status.values()
+                if s["health_status"] == "Progressing"
+            )
+            other_count = total_iocs - healthy_count - progressing_count
+
+            # Update summary PVs if present
+            try:
+                if "TOTAL_IOCS" in self.pvs:
+                    self.pvs["TOTAL_IOCS"].set(int(total_iocs))
+                if "HEALTHY_COUNT" in self.pvs:
+                    self.pvs["HEALTHY_COUNT"].set(int(healthy_count))
+                if "PROGRESSING_COUNT" in self.pvs:
+                    self.pvs["PROGRESSING_COUNT"].set(int(progressing_count))
+                if "OTHER_COUNT" in self.pvs:
+                    self.pvs["OTHER_COUNT"].set(int(other_count))
+            except Exception:
+                self.logger.debug("Failed to update summary count PVs", exc_info=True)
+
             self.set_message(f"Monitoring {total_iocs} IOCs ({healthy_count} healthy)")
 
         except Exception as e:
@@ -396,7 +528,9 @@ class IocMngTask(TaskBase):
 
             # Update status for each tracked IOC
             for ioc_name in self.ioc_status.keys():
-                self._update_ioc_status(ioc_name, app_map.get(ioc_name))
+                # Get the ArgoCD application name for this IOC
+                argocd_app_name = self.ioc_to_app_name.get(ioc_name, ioc_name)
+                self._update_ioc_status(ioc_name, app_map.get(argocd_app_name))
 
         except ApiException as e:
             self.logger.error(f"Error listing ArgoCD applications: {e}")
@@ -518,14 +652,14 @@ class IocMngTask(TaskBase):
 
         # Update timestamps
         try:
-            pvs["LAST_SYNC_TIME"].set(status["last_sync_time"])
+            pvs["LAST_SYNC"].set(status["last_sync_time"])
         except Exception as e:
-            self.logger.debug(f"Error setting LAST_SYNC_TIME for {ioc_name}: {e}")
+            self.logger.debug(f"Error setting LAST_SYNC for {ioc_name}: {e}")
 
         try:
-            pvs["LAST_HEALTH_CHANGE"].set(status["last_health_change"])
+            pvs["LAST_HEALTH"].set(status["last_health_change"])
         except Exception as e:
-            self.logger.debug(f"Error setting LAST_HEALTH_CHANGE for {ioc_name}: {e}")
+            self.logger.debug(f"Error setting LAST_HEALTH for {ioc_name}: {e}")
 
     def _process_control_queue(self):
         """Process queued control actions."""
@@ -551,6 +685,9 @@ class IocMngTask(TaskBase):
     def _start_ioc(self, ioc_name: str):
         """Start (sync) an IOC application."""
         try:
+            # Get the ArgoCD application name for this IOC
+            argocd_app_name = self.ioc_to_app_name.get(ioc_name, ioc_name)
+
             # Trigger a sync operation
             body = {
                 "operation": {
@@ -564,23 +701,28 @@ class IocMngTask(TaskBase):
                 version="v1alpha1",
                 namespace=self.argocd_namespace,
                 plural="applications",
-                name=ioc_name,
+                name=argocd_app_name,
                 body=body,
             )
-            self.logger.info(f"Started (synced) IOC: {ioc_name}")
+            self.logger.info(
+                f"Started (synced) IOC: {ioc_name} (ArgoCD app: {argocd_app_name})"
+            )
         except ApiException as e:
             self.logger.error(f"Error starting IOC {ioc_name}: {e}")
 
     def _stop_ioc(self, ioc_name: str):
         """Stop (suspend) an IOC application."""
         try:
+            # Get the ArgoCD application name for this IOC
+            argocd_app_name = self.ioc_to_app_name.get(ioc_name, ioc_name)
+
             # Get current app
             app = self.api.get_namespaced_custom_object(
                 group="argoproj.io",
                 version="v1alpha1",
                 namespace=self.argocd_namespace,
                 plural="applications",
-                name=ioc_name,
+                name=argocd_app_name,
             )
 
             # Patch to suspend auto-sync
@@ -591,17 +733,22 @@ class IocMngTask(TaskBase):
                 version="v1alpha1",
                 namespace=self.argocd_namespace,
                 plural="applications",
-                name=ioc_name,
+                name=argocd_app_name,
                 body=body,
             )
 
-            self.logger.info(f"Stopped (suspended auto-sync) IOC: {ioc_name}")
+            self.logger.info(
+                f"Stopped (suspended auto-sync) IOC: {ioc_name} (ArgoCD app: {argocd_app_name})"
+            )
         except ApiException as e:
             self.logger.error(f"Error stopping IOC {ioc_name}: {e}")
 
     def _restart_ioc(self, ioc_name: str):
         """Restart an IOC application (hard refresh)."""
         try:
+            # Get the ArgoCD application name for this IOC
+            argocd_app_name = self.ioc_to_app_name.get(ioc_name, ioc_name)
+
             # Trigger a hard refresh by adding annotation
             body = {"metadata": {"annotations": {"argocd.argoproj.io/refresh": "hard"}}}
 
@@ -610,7 +757,7 @@ class IocMngTask(TaskBase):
                 version="v1alpha1",
                 namespace=self.argocd_namespace,
                 plural="applications",
-                name=ioc_name,
+                name=argocd_app_name,
                 body=body,
             )
 
@@ -627,11 +774,13 @@ class IocMngTask(TaskBase):
                 version="v1alpha1",
                 namespace=self.argocd_namespace,
                 plural="applications",
-                name=ioc_name,
+                name=argocd_app_name,
                 body=sync_body,
             )
 
-            self.logger.info(f"Restarted IOC: {ioc_name}")
+            self.logger.info(
+                f"Restarted IOC: {ioc_name} (ArgoCD app: {argocd_app_name})"
+            )
         except ApiException as e:
             self.logger.error(f"Error restarting IOC {ioc_name}: {e}")
 

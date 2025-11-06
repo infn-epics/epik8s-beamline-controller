@@ -242,7 +242,7 @@ class TaskBase(ABC):
         self.logger.info(f"IOC initialized for task: {self.name}")
         
         # Call task-specific initialization
-        self.initialize()
+       # self.initialize()
         
         # Set running flag and status
         self.running = True
@@ -262,7 +262,7 @@ class TaskBase(ABC):
         self.logger.info(f"Starting task (post-IOC): {self.name}")
 
         # Task-specific initialization
-        self.initialize()
+       # self.initialize()
 
         # Set running flag and status
         self.running = True

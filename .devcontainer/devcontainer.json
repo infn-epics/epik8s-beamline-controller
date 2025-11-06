@@ -7,7 +7,7 @@
     //         "TARGET_ARCHITECTURE": "linux"
     //     }
     // },
-    "image": "python:3.11-slim",
+    "image": "python:3.10",
     "remoteEnv": {
         // allows X11 apps to run inside the container
         "DISPLAY": "${localEnv:DISPLAY}",
@@ -30,7 +30,9 @@
                 "redhat.vscode-yaml",
                 "ryanluker.vscode-coverage-gutters",
                 "epicsdeb.vscode-epics",
-                "ms-python.black-formatter"
+                "ms-python.black-formatter",
+                "github.copilot-chat",
+                "github.copilot"
             ]
         }
     },

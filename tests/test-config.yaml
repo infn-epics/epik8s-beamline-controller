@@ -9,10 +9,10 @@ tasksrev: "main"
 tasks:
   # Example monitoring task
   - name: "monitor_01"
-    module: "monitoring_task"  # Python module name in tasks/ directory
+    module: "monitoring_task" # Python module name in tasks/ directory
     parameters:
-      update_rate: 2.0  # Hz
-      calculation_type: "average"  # average, sum, max, min
+      update_rate: 2.0 # Hz
+      calculation_type: "average" # average, sum, max, min
     pvs:
       inputs:
         INPUT1:
@@ -100,12 +100,11 @@ tasks:
   #         type: float
   #         value: 0.0
 
-
   # Example motor control task using Ophyd devices
   - name: "check_motor_movement"
     module: "check_motor_movement"
     parameters:
-      update_rate: 2.0  # Hz
+      update_rate: 2.0 # Hz
       # List of motor device names from values.yaml IOCs
       # Format: "ioc_name" or "ioc_name_device_name" for multi-device IOCs
       motors:
@@ -130,7 +129,7 @@ tasks:
         - "CMBROV01"
         - "CMBTHR01"
         - "CMBTRH01"
-       
+
       switchoff:
         - "CATLAS01"
         - "EOSLAS01"
@@ -142,4 +141,10 @@ tasks:
           value: 0
           znam: "Stopped"
           onam: "Moving"
-        
+
+  # IOC Management Task - Monitors ArgoCD applications
+  - name: "ioc_manager"
+    module: "iocmng_task"
+    parameters:
+      update_rate: 0.1 # Hz (every 10 seconds)
+      argocd_namespace: "argocd"

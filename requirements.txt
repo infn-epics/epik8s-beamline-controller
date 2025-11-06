@@ -2,21 +2,21 @@
 # Python dependencies for the beamline controller application
 
 # EPICS soft IOC support (pythonSoftIOC)
-softioc>=4.6.1
+softioc
 
 # Cothread for cooperative threading
-cothread>=2.19
+cothread
 
 # YAML parsing
-PyYAML>=6.0
+pyyaml
 
 # Ophyd for device abstraction
-ophyd>=1.6.0
+ophyd
 
 # INFN Ophyd HAL (if available locally, otherwise install from source)
 infn_ophyd_hal
 
 # Logging and utilities
-python-dateutil>=2.8.0
+python-dateutil
 
 kubernetes
