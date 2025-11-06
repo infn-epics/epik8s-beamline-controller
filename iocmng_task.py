@@ -100,6 +100,11 @@ class IocmngTask(TaskBase):
         self._k8s_saved_proxy_env = {}
         self._k8s_last_proxy_error_time = 0
 
+        # EPICS Archiver monitoring
+        self.archiver_url = None
+        self.archiver_pvs = {}  # pv_name -> archiver status
+        self.archiver_connectivity = {}  # pv_name -> connectivity status
+
     def initialize(self):
         """Initialize the IOC status monitoring task."""
         self.logger.info("Initializing IOC status task")
@@ -116,6 +121,14 @@ class IocmngTask(TaskBase):
             "update_rate", 0.05
         )  # Hz (default: every 2 seconds)
         self.argocd_namespace = self.parameters.get("argocd_namespace", "argocd")
+
+        # EPICS Archiver configuration
+        self.archiver_url = self.parameters.get(
+            "archiver_url"
+        )  # Base URL for archiver REST API
+        self.archiver_appliance = self.parameters.get(
+            "archiver_appliance", "default"
+        )  # Appliance name
 
         # Kubernetes connection parameters for development/out-of-cluster usage
         self.kubeconfig_path = self.parameters.get(
@@ -189,6 +202,9 @@ class IocmngTask(TaskBase):
         self.logger.info(f"Update rate: {self.update_rate} Hz")
         self.logger.info(f"ArgoCD namespace: {self.argocd_namespace}")
         self.logger.info(f"K8s namespace: {self.k8s_namespace}")
+        if self.archiver_url:
+            self.logger.info(f"Archiver URL: {self.archiver_url}")
+            self.logger.info(f"Archiver appliance: {self.archiver_appliance}")
 
         # Set status to RUN when initialization is successful
         self.set_status("RUN")
@@ -454,6 +470,10 @@ class IocmngTask(TaskBase):
         for service_name in self.service_status.keys():
             self._create_service_specific_pvs(service_name)
 
+        # Create archiver monitoring PVs if archiver is configured
+        if self.archiver_url:
+            self._create_archiver_pvs()
+
     def _create_ioc_specific_pvs(self, ioc_name: str):
         """Create status and control PVs for a specific IOC."""
         ioc_prefix = ioc_name.upper().replace("-", "_")
@@ -631,6 +651,26 @@ class IocmngTask(TaskBase):
 
         self.logger.debug(f"Created PVs for service: {service_name}")
 
+    def _create_archiver_pvs(self):
+        """Create PVs for EPICS Archiver monitoring."""
+        try:
+            # Archiver status PVs
+            self.pvs["ARCHIVER_STATUS"] = builder.stringIn(
+                "ARCHIVER_STATUS", initial_value="Unknown"
+            )
+            self.pvs["ARCHIVER_TOTAL_PVS"] = builder.longIn(
+                "ARCHIVER_TOTAL_PVS", initial_value=0
+            )
+            self.pvs["ARCHIVER_CONNECTED_PVS"] = builder.longIn(
+                "ARCHIVER_CONNECTED_PVS", initial_value=0
+            )
+            self.pvs["ARCHIVER_DISCONNECTED_PVS"] = builder.longIn(
+                "ARCHIVER_DISCONNECTED_PVS", initial_value=0
+            )
+            self.logger.info("Created archiver monitoring PVs")
+        except Exception as e:
+            self.logger.debug(f"Failed to create archiver PVs: {e}", exc_info=True)
+
     def _on_control_action(self, ioc_name: str, action: str, value: Any):
         """Handle control button presses."""
         try:
@@ -706,6 +746,10 @@ class IocmngTask(TaskBase):
             # Update status for all IOCs and services
             self._update_all_ioc_status()
             self._update_all_service_status()
+
+            # Update archiver status if configured
+            if self.archiver_url:
+                self._update_archiver_status()
 
             # Process any queued control actions
             self._process_control_queue()
@@ -1345,6 +1389,80 @@ class IocmngTask(TaskBase):
             self.logger.error(
                 f"Error restarting ArgoCD application {argocd_app_name}: {e}"
             )
+
+    def _update_archiver_status(self):
+        """Update EPICS Archiver status via REST API."""
+        if not self.archiver_url:
+            return
+
+        try:
+            import requests
+        except ImportError:
+            requests = None
+            self.logger.warning(
+                "requests library not available. Archiver monitoring will be disabled."
+            )
+
+        if requests is None:
+            self.logger.warning(
+                "Skipping archiver status update - requests not available"
+            )
+            return
+
+        try:
+            # Get appliance metrics from archiver
+            mgmt_url = f"{self.archiver_url}/mgmt/bpl/getApplianceMetrics"
+            params = {}
+            if self.archiver_appliance != "default":
+                params["appliance"] = self.archiver_appliance
+
+            response = requests.get(mgmt_url, params=params, timeout=10)
+            response.raise_for_status()
+
+            data = response.json()
+            if isinstance(data, list) and len(data) > 0:
+                metrics = data[0]
+                total_pvs = int(metrics.get("pvCount", 0))
+                connected_count = int(metrics.get("connectedPVCount", 0))
+                disconnected_count = int(metrics.get("disconnectedPVCount", 0))
+            else:
+                total_pvs = 0
+                connected_count = 0
+                disconnected_count = 0
+
+            # Update PVs
+            try:
+                if "ARCHIVER_STATUS" in self.pvs:
+                    self.pvs["ARCHIVER_STATUS"].set("Connected")
+                if "ARCHIVER_TOTAL_PVS" in self.pvs:
+                    self.pvs["ARCHIVER_TOTAL_PVS"].set(int(total_pvs))
+                if "ARCHIVER_CONNECTED_PVS" in self.pvs:
+                    self.pvs["ARCHIVER_CONNECTED_PVS"].set(int(connected_count))
+                if "ARCHIVER_DISCONNECTED_PVS" in self.pvs:
+                    self.pvs["ARCHIVER_DISCONNECTED_PVS"].set(int(disconnected_count))
+            except Exception as e:
+                self.logger.debug(f"Error updating archiver PVs: {e}")
+
+            self.logger.debug(
+                f"Archiver status: {total_pvs} total PVs, {connected_count} connected, {disconnected_count} disconnected"
+            )
+
+        except requests.exceptions.RequestException as e:
+            self.logger.warning(f"Error accessing archiver API: {e}")
+            try:
+                if "ARCHIVER_STATUS" in self.pvs:
+                    self.pvs["ARCHIVER_STATUS"].set("Disconnected")
+            except Exception:
+                pass
+        except Exception as e:
+            self.logger.error(
+                f"Unexpected error updating archiver status: {e}", exc_info=True
+            )
+            try:
+                if "ARCHIVER_STATUS" in self.pvs:
+                    self.pvs["ARCHIVER_STATUS"].set("Error")
+            except Exception:
+                pass
 
     def cleanup(self):
         """Cleanup when task stops."""

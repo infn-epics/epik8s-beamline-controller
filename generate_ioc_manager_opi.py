@@ -1021,7 +1021,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     # Calculate display height - increased for combined IOC/service tabs
     # Title + control + combined tabs + instructions
     row_height = 40  # Still needed for tab content layout
-    display_height = 60 + 120 + 600 + 80  # Increased tab area for combined content
+    display_height = 60 + 180 + 600 + 80  # Increased task control area and tab area
 
     # Create root display element
     display = ET.Element("display", version="2.0.0")
@@ -1064,7 +1064,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     ET.SubElement(task_group, "x").text = "10"
     ET.SubElement(task_group, "y").text = "60"
     ET.SubElement(task_group, "width").text = "1380"
-    ET.SubElement(task_group, "height").text = "140"
+    ET.SubElement(task_group, "height").text = "170"
     ET.SubElement(task_group, "style").text = "3"
 
     group_bg = ET.SubElement(task_group, "background_color")
@@ -1249,12 +1249,95 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
         )
     )
 
-    # Message label and value
+    # Archiver monitoring counters
     task_group.append(
-        create_label("MessageLabel", "Message:", 20, 100, 80, 30, bold=True)
+        create_label(
+            "ArchiverStatusLabel",
+            "Archiver:",
+            20,
+            110,
+            80,
+            30,
+            bold=True,
+            horizontal_alignment=2,
+        )
     )
     task_group.append(
-        create_textupdate("TaskMessage", f"{prefix}:IOCMNG:MESSAGE", 110, 100, 1250, 30)
+        create_textupdate(
+            "ArchiverStatus", f"{prefix}:IOCMNG:ARCHIVER_STATUS", 110, 110, 100, 30
+        )
+    )
+
+    task_group.append(
+        create_label(
+            "ArchiverTotalLabel",
+            "Total PVs:",
+            220,
+            110,
+            80,
+            30,
+            bold=True,
+            horizontal_alignment=2,
+        )
+    )
+    task_group.append(
+        create_textupdate(
+            "ArchiverTotalPVs", f"{prefix}:IOCMNG:ARCHIVER_TOTAL_PVS", 310, 110, 80, 30
+        )
+    )
+
+    task_group.append(
+        create_label(
+            "ArchiverConnectedLabel",
+            "Connected:",
+            400,
+            110,
+            80,
+            30,
+            bold=True,
+            horizontal_alignment=2,
+        )
+    )
+    task_group.append(
+        create_textupdate(
+            "ArchiverConnectedPVs",
+            f"{prefix}:IOCMNG:ARCHIVER_CONNECTED_PVS",
+            490,
+            110,
+            80,
+            30,
+        )
+    )
+
+    task_group.append(
+        create_label(
+            "ArchiverDisconnectedLabel",
+            "Disconnected:",
+            580,
+            110,
+            100,
+            30,
+            bold=True,
+            horizontal_alignment=2,
+        )
+    )
+    task_group.append(
+        create_textupdate(
+            "ArchiverDisconnectedPVs",
+            f"{prefix}:IOCMNG:ARCHIVER_DISCONNECTED_PVS",
+            690,
+            110,
+            80,
+            30,
+        )
+    )
+
+    # Message label and value
+    task_group.append(
+        create_label("MessageLabel", "Message:", 20, 140, 80, 30, bold=True)
+    )
+    task_group.append(
+        create_textupdate("TaskMessage", f"{prefix}:IOCMNG:MESSAGE", 110, 140, 1250, 30)
     )
 
     display.append(task_group)
@@ -1314,9 +1397,9 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     app_tabs_widget = ET.Element("widget", type="tabs", version="2.0.0")
     ET.SubElement(app_tabs_widget, "name").text = "ApplicationTabs"
     ET.SubElement(app_tabs_widget, "x").text = "10"
-    ET.SubElement(app_tabs_widget, "y").text = "190"
+    ET.SubElement(app_tabs_widget, "y").text = "240"
     ET.SubElement(app_tabs_widget, "width").text = "1380"
-    ET.SubElement(app_tabs_widget, "height").text = str(display_height - 190)
+    ET.SubElement(app_tabs_widget, "height").text = str(display_height - 240)
 
     # Tabs container
     app_tabs_container = ET.SubElement(app_tabs_widget, "tabs")
@@ -1421,7 +1504,8 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
             "InstructionsText",
             f"Generated for {len(iocs)} IOCs and {len(services)} services from beamline configuration.\n"
             "Color indicators: Green = Healthy/Synced, Red = Unhealthy/OutOfSync, Yellow = Warning/Progressing\n"
-            "Actions: START enables ArgoCD sync, STOP suspends application, RESTART performs hard refresh",
+            "Actions: START enables ArgoCD sync, STOP suspends application, RESTART performs hard refresh\n"
+            "Archiver monitoring shows EPICS Archiver appliance status and PV connectivity counts",
             10,
             5,
             1360,
