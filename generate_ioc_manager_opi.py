@@ -767,9 +767,9 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     print(f"Found {len(iocs)} IOCs in beamline configuration")
 
     # Calculate display height - fixed for tabbed interface
-    # Title + control + devgroup tabs + IOC tabs + instructions
+    # Title + control + IOC tabs + instructions
     row_height = 40  # Still needed for tab content layout
-    display_height = 60 + 120 + 100 + 400 + 80  # Fixed height for tabbed layout
+    display_height = 60 + 120 + 400 + 80  # Fixed height for tabbed layout
 
     # Create root display element
     display = ET.Element("display", version="2.0.0")
@@ -927,57 +927,6 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
             devgroups.add(devgroup)
     devgroups = sorted(devgroups)
 
-    # Device Groups Tabs
-    tabs_widget = ET.Element("widget", type="tabs", version="2.0.0")
-    ET.SubElement(tabs_widget, "name").text = "DeviceGroupsTabs"
-    ET.SubElement(tabs_widget, "x").text = "10"
-    ET.SubElement(tabs_widget, "y").text = "190"
-    ET.SubElement(tabs_widget, "width").text = "1380"
-    ET.SubElement(tabs_widget, "height").text = "100"
-
-    # Background color
-    tabs_bg = ET.SubElement(tabs_widget, "background_color")
-    tabs_bg.append(create_color(230, 240, 255))
-
-    # Tabs container
-    tabs_container = ET.SubElement(tabs_widget, "tabs")
-
-    # Create a tab for each devgroup
-    for devgroup in devgroups:
-        tab = ET.SubElement(tabs_container, "tab")
-        ET.SubElement(tab, "name").text = devgroup.upper()
-
-        # Children container
-        children = ET.SubElement(tab, "children")
-
-        # Label for devgroup name
-        children.append(
-            create_label(
-                f"DevGroupLabel_{devgroup}",
-                f"{devgroup.upper()} IOCs",
-                20,
-                10,
-                200,
-                25,
-                font_size="16.0",
-                bold=True,
-            )
-        )
-
-        # Text update for IOC list
-        children.append(
-            create_textupdate(
-                f"DevGroupIOCs_{devgroup}",
-                f"{prefix}:IOCMNG:DEVGROUP_{devgroup.upper()}_IOCS",
-                20,
-                45,
-                1340,
-                40,
-            )
-        )
-
-    display.append(tabs_widget)
-
     # Group IOCs by devgroup
     iocs_by_devgroup = {}
     for ioc in iocs:
@@ -992,9 +941,9 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     ioc_tabs_widget = ET.Element("widget", type="tabs", version="2.0.0")
     ET.SubElement(ioc_tabs_widget, "name").text = "IOCTabs"
     ET.SubElement(ioc_tabs_widget, "x").text = "10"
-    ET.SubElement(ioc_tabs_widget, "y").text = "300"
+    ET.SubElement(ioc_tabs_widget, "y").text = "190"
     ET.SubElement(ioc_tabs_widget, "width").text = "1380"
-    ET.SubElement(ioc_tabs_widget, "height").text = str(display_height - 380)
+    ET.SubElement(ioc_tabs_widget, "height").text = str(display_height - 190)
 
     # Tabs container
     ioc_tabs_container = ET.SubElement(ioc_tabs_widget, "tabs")
