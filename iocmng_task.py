@@ -77,13 +77,23 @@ class IocmngTask(TaskBase):
         self.ioc_pvs = {}  # ioc_name -> dict of PV objects
         self.ioc_to_app_name = {}  # ioc_name -> ArgoCD application name mapping
 
+        # Service tracking (symmetric to IOCs)
+        self.service_devgroups = {}  # devgroup -> list of service names
+        self.service_status = {}  # service_name -> status dict
+        self.service_pvs = {}  # service_name -> dict of PV objects
+        self.service_to_app_name = {}  # service_name -> ArgoCD application name mapping
+
         # Status tracking for change detection
         self.last_health_status = {}  # ioc_name -> health status
         self.last_health_change_time = {}  # ioc_name -> timestamp
+        self.last_service_health_status = {}  # service_name -> health status
+        self.last_service_health_change_time = {}  # service_name -> timestamp
 
         # Control action queue
         self.control_queue = []
+        self.service_control_queue = []
         self.control_lock = threading.Lock()
+        self.service_control_lock = threading.Lock()
 
         # Kubernetes network/proxy helpers
         self._k8s_proxy_disabled = False
@@ -170,15 +180,19 @@ class IocmngTask(TaskBase):
 
         self.api = client.CustomObjectsApi()
 
-        # Create PVs for devgroups and IOCs
-        self._create_ioc_pvs()
+        # Create PVs for devgroups, IOCs, and services
+        self._create_pvs()
 
         self.logger.info(
-            f"Monitoring {len(self.ioc_status)} IOCs in {len(self.devgroups)} devgroups"
+            f"Monitoring {len(self.ioc_status)} IOCs in {len(self.devgroups)} devgroups and {len(self.service_status)} services in {len(self.service_devgroups)} service devgroups"
         )
         self.logger.info(f"Update rate: {self.update_rate} Hz")
         self.logger.info(f"ArgoCD namespace: {self.argocd_namespace}")
         self.logger.info(f"K8s namespace: {self.k8s_namespace}")
+
+        # Set status to RUN when initialization is successful
+        self.set_status("RUN")
+        self.set_message("Initialized and monitoring")
 
     def _disable_k8s_proxy_env(self):
         """Temporarily remove proxy environment variables to allow direct in-cluster API access."""
@@ -219,7 +233,15 @@ class IocmngTask(TaskBase):
             self.logger.debug(f"Failed to restore proxy env vars: {e}")
 
     def _parse_beamline_config(self):
-        """Parse beamline configuration to extract devgroups and IOCs."""
+        """Parse beamline configuration to extract devgroups, IOCs, and services."""
+        # Parse IOCs first
+        self._parse_iocs_config()
+
+        # Parse services
+        self._parse_services_config()
+
+    def _parse_iocs_config(self):
+        """Parse IOCs from beamline configuration."""
         # Look for IOCs in common locations. Support both formats:
         # 1) Top-level mapping: beamline_config['iocs'] -> {ioc_name: {...}}
         # 2) Epics configuration list: beamline_config['epicsConfiguration']['iocs'] -> [{name: ..., ...}, ...]
@@ -286,17 +308,85 @@ class IocmngTask(TaskBase):
             }
 
         self.logger.info(
-            f"Found {len(self.devgroups)} devgroups with {len(self.ioc_status)} IOCs total"
+            f"Found {len(self.devgroups)} IOC devgroups with {len(self.ioc_status)} IOCs total"
         )
         self.logger.debug(f"IOC to ArgoCD app mapping: {self.ioc_to_app_name}")
 
-    def _create_ioc_pvs(self):
-        """Create PVs for devgroups and individual IOCs using softioc builder."""
-        # Set device name prefix
+    def _parse_services_config(self):
+        """Parse services from beamline configuration."""
+        # Look for services in epicsConfiguration.services
+        epics_conf = self.beamline_config.get("epicsConfiguration", {})
+        if not isinstance(epics_conf, dict):
+            self.logger.warning(
+                "No 'epicsConfiguration' section found in beamline configuration"
+            )
+            return
+
+        services_config = epics_conf.get("services")
+        if not services_config:
+            self.logger.warning("No 'services' section found in beamline configuration")
+            return
+
+        if not isinstance(services_config, dict):
+            self.logger.warning(
+                "Unsupported 'services' format in beamline configuration"
+            )
+            return
+
+        # Group services by devgroup and initialize status
+        for service_name, service_data in services_config.items():
+            if not isinstance(service_data, dict):
+                self.logger.debug(f"Skipping service {service_name}: not a dict")
+                continue
+
+            # Services don't have explicit devgroups like IOCs, so we'll use a default
+            # or derive from service type
+            devgroup = service_data.get("devgroup", "services")
+
+            if devgroup not in self.service_devgroups:
+                self.service_devgroups[devgroup] = []
+
+            self.service_devgroups[devgroup].append(service_name)
+
+            # Build ArgoCD application name: <namespace>-<servicename>
+            argocd_app_name = f"{self.k8s_namespace}-{service_name}-service"
+            self.service_to_app_name[service_name] = argocd_app_name
+
+            # Initialize service status
+            self.service_status[service_name] = {
+                "app_status": "Unknown",
+                "sync_status": "Unknown",
+                "health_status": "Unknown",
+                "last_sync_time": "Never",
+                "last_health_change": "Never",
+                "devgroup": devgroup,
+                "argocd_app_name": argocd_app_name,
+            }
+
+        self.logger.info(
+            f"Found {len(self.service_devgroups)} service devgroups with {len(self.service_status)} services total"
+        )
+        self.logger.debug(f"Service to ArgoCD app mapping: {self.service_to_app_name}")
+
+    def _create_pvs(self):
+        """Create PVs for devgroups, IOCs, and services using softioc builder.
+
+        This implementation extends the generic PVs created by TaskBase
+        (STATUS, MESSAGE, ENABLE, CYCLE_COUNT, plus any declared inputs/outputs)
+        with IOC/service-specific records and summary counters.
+        """
+        # First create the common/base PVs from TaskBase so STATUS, MESSAGE,
+        # ENABLE and CYCLE_COUNT exist and are handled consistently.
+        try:
+            super()._create_pvs()
+        except Exception as e:
+            # Log but continue creating the task-specific PVs
+            self.logger.debug(f"Failed to create base task PVs: {e}", exc_info=True)
+
+        # Ensure device name prefix is set for subsequent PV creation
         builder.SetDeviceName(self.pv_prefix)
 
-        # Summary counters PVs (total / healthy / progressing / other)
-        # These are long integer read-only PVs updated each cycle by the task
+        # Summary counters PVs (total / healthy / progressing / other) for IOCs
         try:
             self.pvs["TOTAL_IOCS"] = builder.longIn(
                 "TOTAL_IOCS", initial_value=len(self.ioc_status)
@@ -307,30 +397,62 @@ class IocmngTask(TaskBase):
             )
             self.pvs["OTHER_COUNT"] = builder.longIn("OTHER_COUNT", initial_value=0)
         except Exception:
-            # If builder is not available or PV creation fails, continue gracefully
-            self.logger.debug("Failed to create summary count PVs", exc_info=True)
+            self.logger.debug("Failed to create IOC summary count PVs", exc_info=True)
 
-        # Create waveform PVs for each devgroup
+        # Summary counters PVs for services
+        try:
+            self.pvs["TOTAL_SERVICES"] = builder.longIn(
+                "TOTAL_SERVICES", initial_value=len(self.service_status)
+            )
+            self.pvs["SERVICES_HEALTHY_COUNT"] = builder.longIn(
+                "SERVICES_HEALTHY_COUNT", initial_value=0
+            )
+            self.pvs["SERVICES_PROGRESSING_COUNT"] = builder.longIn(
+                "SERVICES_PROGRESSING_COUNT", initial_value=0
+            )
+            self.pvs["SERVICES_OTHER_COUNT"] = builder.longIn(
+                "SERVICES_OTHER_COUNT", initial_value=0
+            )
+        except Exception:
+            self.logger.debug(
+                "Failed to create service summary count PVs", exc_info=True
+            )
+
+        # Create waveform PVs for IOC devgroups
         for devgroup, ioc_list in self.devgroups.items():
             pv_name = f"DEVGROUP_{devgroup.upper()}_IOCS"
-
-            # Create a waveform of strings (char waveform with max length)
-            # Join IOC names with commas
             ioc_list_str = ",".join(ioc_list)
             max_len = len(ioc_list_str)
             self.logger.debug(
-                f"Creating devgroup PV: {pv_name} with {len(ioc_list)} IOCs max_len={max_len}"
+                f"Creating IOC devgroup PV: {pv_name} with {len(ioc_list)} IOCs max_len={max_len}"
             )
             pv = builder.WaveformIn(pv_name, initial_value=ioc_list, length=max_len)
             self.pvs[pv_name] = pv
-
             self.logger.info(
-                f"Created devgroup PV: {pv_name} with {len(ioc_list)} IOCs"
+                f"Created IOC devgroup PV: {pv_name} with {len(ioc_list)} IOCs"
+            )
+
+        # Create waveform PVs for service devgroups
+        for devgroup, service_list in self.service_devgroups.items():
+            pv_name = f"SERVICE_DEVGROUP_{devgroup.upper()}_SERVICES"
+            service_list_str = ",".join(service_list)
+            max_len = len(service_list_str)
+            self.logger.debug(
+                f"Creating service devgroup PV: {pv_name} with {len(service_list)} services max_len={max_len}"
+            )
+            pv = builder.WaveformIn(pv_name, initial_value=service_list, length=max_len)
+            self.pvs[pv_name] = pv
+            self.logger.info(
+                f"Created service devgroup PV: {pv_name} with {len(service_list)} services"
             )
 
         # Create status and control PVs for each IOC
         for ioc_name in self.ioc_status.keys():
             self._create_ioc_specific_pvs(ioc_name)
+
+        # Create status and control PVs for each service
+        for service_name in self.service_status.keys():
+            self._create_service_specific_pvs(service_name)
 
     def _create_ioc_specific_pvs(self, ioc_name: str):
         """Create status and control PVs for a specific IOC."""
@@ -422,6 +544,93 @@ class IocmngTask(TaskBase):
 
         self.logger.debug(f"Created PVs for IOC: {ioc_name}")
 
+    def _create_service_specific_pvs(self, service_name: str):
+        """Create status and control PVs for a specific service."""
+        service_prefix = service_name.upper().replace("-", "_")
+
+        # EPICS record name limit is 60 characters
+        max_record_length = 60
+        prefix_overhead = len(self.pv_prefix) + 1
+        longest_suffix = len("_LAST_HEALTH")
+        max_service_prefix_len = max_record_length - prefix_overhead - longest_suffix
+
+        # Truncate service prefix if necessary
+        if len(service_prefix) > max_service_prefix_len:
+            original_prefix = service_prefix
+            service_prefix = service_prefix[:max_service_prefix_len]
+            self.logger.warning(
+                f"Service prefix '{original_prefix}' truncated to '{service_prefix}' "
+                f"(max {max_service_prefix_len} chars) to fit EPICS 60-char record name limit"
+            )
+
+        service_pv_dict = {}
+
+        # Status PVs (readonly from service perspective)
+        service_pv_dict["APP_STATUS"] = builder.stringIn(
+            f"{service_prefix}_APP_STATUS", initial_value="Unknown"
+        )
+
+        # Sync status (mbbi: Synced=0, OutOfSync=1, Unknown=2, Error=3)
+        service_pv_dict["SYNC_STATUS"] = builder.mbbIn(
+            f"{service_prefix}_SYNC_STATUS",
+            initial_value=2,
+            ZRST="Synced",
+            ONST="OutOfSync",
+            TWST="Unknown",
+            THST="Error",
+        )
+
+        # Health status (mbbi: Healthy=0, Progressing=1, Degraded=2, Missing=3, Unknown=4, Warning=5, Error=6)
+        service_pv_dict["HEALTH_STATUS"] = builder.mbbIn(
+            f"{service_prefix}_HEALTH_STATUS",
+            initial_value=4,
+            ZRST="Healthy",
+            ONST="Progressing",
+            TWST="Degraded",
+            THST="Missing",
+            FRST="Unknown",
+            FVST="Warning",
+            SXST="Error",
+        )
+
+        # Timestamps
+        service_pv_dict["LAST_SYNC"] = builder.stringIn(
+            f"{service_prefix}_LAST_SYNC", initial_value="Never"
+        )
+
+        service_pv_dict["LAST_HEALTH"] = builder.stringIn(
+            f"{service_prefix}_LAST_HEALTH", initial_value="Never"
+        )
+
+        # Control PVs (writable buttons)
+        service_pv_dict["START"] = builder.boolOut(
+            f"{service_prefix}_START",
+            initial_value=0,
+            on_update=lambda value, service=service_name: self._on_service_control_action(
+                service, "START", value
+            ),
+        )
+
+        service_pv_dict["STOP"] = builder.boolOut(
+            f"{service_prefix}_STOP",
+            initial_value=0,
+            on_update=lambda value, service=service_name: self._on_service_control_action(
+                service, "STOP", value
+            ),
+        )
+
+        service_pv_dict["RESTART"] = builder.boolOut(
+            f"{service_prefix}_RESTART",
+            initial_value=0,
+            on_update=lambda value, service=service_name: self._on_service_control_action(
+                service, "RESTART", value
+            ),
+        )
+
+        self.service_pvs[service_name] = service_pv_dict
+
+        self.logger.debug(f"Created PVs for service: {service_name}")
+
     def _on_control_action(self, ioc_name: str, action: str, value: Any):
         """Handle control button presses."""
         try:
@@ -446,13 +655,41 @@ class IocmngTask(TaskBase):
 
         self.logger.info(f"Queued {action} action for IOC: {ioc_name}")
 
+    def _on_service_control_action(self, service_name: str, action: str, value: Any):
+        """Handle service control button presses."""
+        try:
+            pressed = bool(value)
+        except Exception:
+            pressed = False
+
+        if not pressed:
+            return
+
+        # Reset the button immediately
+        button_pv = self.service_pvs[service_name].get(action)
+        if button_pv:
+            try:
+                button_pv.set(0)
+            except Exception:
+                pass
+
+        # Queue the action for processing
+        with self.control_lock:
+            self.service_control_queue.append((service_name, action))
+
+        self.logger.info(f"Queued {action} action for service: {service_name}")
+
     def run(self):
         """Main task execution loop."""
         self.logger.info("Starting IOC status monitoring loop")
 
         while self.running:
             # Only process if task is enabled
-            enabled = self.get_pv("ENABLE")
+            try:
+                enabled = self.pvs["ENABLE"].get()
+            except KeyError:
+                enabled = True  # Default to enabled if PV not found
+                self.logger.debug("ENABLE PV not found, defaulting to enabled")
 
             if enabled:
                 self._process_cycle()
@@ -466,13 +703,15 @@ class IocmngTask(TaskBase):
     def _process_cycle(self):
         """Process one monitoring cycle."""
         try:
-            # Update status for all IOCs
+            # Update status for all IOCs and services
             self._update_all_ioc_status()
+            self._update_all_service_status()
 
             # Process any queued control actions
             self._process_control_queue()
+            self._process_service_control_queue()
 
-            # Update message
+            # Update IOC summary PVs
             total_iocs = len(self.ioc_status)
             healthy_count = sum(
                 1 for s in self.ioc_status.values() if s["health_status"] == "Healthy"
@@ -484,7 +723,23 @@ class IocmngTask(TaskBase):
             )
             other_count = total_iocs - healthy_count - progressing_count
 
-            # Update summary PVs if present
+            # Update service summary PVs
+            total_services = len(self.service_status)
+            services_healthy_count = sum(
+                1
+                for s in self.service_status.values()
+                if s["health_status"] == "Healthy"
+            )
+            services_progressing_count = sum(
+                1
+                for s in self.service_status.values()
+                if s["health_status"] == "Progressing"
+            )
+            services_other_count = (
+                total_services - services_healthy_count - services_progressing_count
+            )
+
+            # Update IOC summary PVs if present
             try:
                 if "TOTAL_IOCS" in self.pvs:
                     self.pvs["TOTAL_IOCS"].set(int(total_iocs))
@@ -495,9 +750,30 @@ class IocmngTask(TaskBase):
                 if "OTHER_COUNT" in self.pvs:
                     self.pvs["OTHER_COUNT"].set(int(other_count))
             except Exception:
-                self.logger.debug("Failed to update summary count PVs", exc_info=True)
+                self.logger.debug(
+                    "Failed to update IOC summary count PVs", exc_info=True
+                )
 
-            self.set_message(f"Monitoring {total_iocs} IOCs ({healthy_count} healthy)")
+            # Update service summary PVs if present
+            try:
+                if "TOTAL_SERVICES" in self.pvs:
+                    self.pvs["TOTAL_SERVICES"].set(int(total_services))
+                if "SERVICES_HEALTHY_COUNT" in self.pvs:
+                    self.pvs["SERVICES_HEALTHY_COUNT"].set(int(services_healthy_count))
+                if "SERVICES_PROGRESSING_COUNT" in self.pvs:
+                    self.pvs["SERVICES_PROGRESSING_COUNT"].set(
+                        int(services_progressing_count)
+                    )
+                if "SERVICES_OTHER_COUNT" in self.pvs:
+                    self.pvs["SERVICES_OTHER_COUNT"].set(int(services_other_count))
+            except Exception:
+                self.logger.debug(
+                    "Failed to update service summary count PVs", exc_info=True
+                )
+
+            self.set_message(
+                f"Monitoring {total_iocs} IOCs ({healthy_count} healthy) and {total_services} services ({services_healthy_count} healthy)"
+            )
 
         except Exception as e:
             self.logger.error(f"Error in processing cycle: {e}", exc_info=True)
@@ -537,6 +813,167 @@ class IocmngTask(TaskBase):
         except Exception as e:
             self.logger.error(
                 f"Unexpected error updating IOC status: {e}", exc_info=True
+            )
+
+    def _update_service_status(self, service_name, app):
+        """Update status for a single service based on ArgoCD application data."""
+        if service_name not in self.service_status:
+            return
+
+        try:
+            if app is None:
+                # Application not found
+                self.service_status[service_name]["app_status"] = "NOT_FOUND"
+                self.service_status[service_name]["sync_status"] = "Unknown"
+                self.service_status[service_name]["health_status"] = "Missing"
+                self.service_pvs[service_name]["APP_STATUS"].set("NOT_FOUND")
+                self.service_pvs[service_name]["SYNC_STATUS"].set(3)  # Red
+                self.service_pvs[service_name]["HEALTH_STATUS"].set(3)  # Red
+                return
+
+            # Extract status information
+            status = app.get("status", {})
+
+            # Operation phase (Running, Suspended, etc.)
+            operation_state = status.get("operationState", {})
+            phase = operation_state.get("phase", "Unknown")
+            self.service_status[service_name]["app_status"] = phase
+
+            # Sync status
+            sync = status.get("sync", {})
+            sync_status = sync.get("status", "Unknown")
+            self.service_status[service_name]["sync_status"] = sync_status
+
+            # Last sync time
+            sync_result = status.get("operationState", {}).get("finishedAt")
+            if sync_result:
+                try:
+                    # Parse and format timestamp
+                    dt = datetime.fromisoformat(sync_result.replace("Z", "+00:00"))
+                    self.service_status[service_name]["last_sync_time"] = dt.strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+                except Exception:
+                    self.service_status[service_name]["last_sync_time"] = sync_result
+
+            # Health status
+            health = status.get("health", {})
+            health_status = health.get("status", "Unknown")
+
+            # Detect health status change
+            previous_health = self.last_service_health_status.get(
+                service_name, "Unknown"
+            )
+            if health_status != previous_health:
+                self.last_service_health_status[service_name] = health_status
+                self.last_service_health_change_time[service_name] = (
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                )
+                self.service_status[service_name]["last_health_change"] = (
+                    self.last_service_health_change_time[service_name]
+                )
+                self.logger.info(
+                    f"Service {service_name} health changed: {previous_health} -> {health_status}"
+                )
+
+            self.service_status[service_name]["health_status"] = health_status
+
+            # Map ArgoCD sync status to our numeric values
+            sync_status_map = {
+                "Synced": 0,  # Green
+                "OutOfSync": 1,  # Yellow
+                "Unknown": 2,  # Orange
+            }
+            sync_value = sync_status_map.get(sync_status, 3)  # Red for other statuses
+
+            # Map ArgoCD health status to our numeric values
+            health_status_map = {
+                "Healthy": 0,  # Green
+                "Progressing": 1,  # Yellow
+                "Suspended": 5,  # Yellow
+                "Degraded": 2,  # Red
+                "Missing": 3,  # Red
+                "Unknown": 4,  # Red
+            }
+            health_value = health_status_map.get(
+                health_status, 4
+            )  # Red for other statuses
+
+            # Determine overall service status
+            if sync_value == 0 and health_value == 0:
+                overall_status = "HEALTHY"
+            elif health_value == 1:
+                overall_status = "PROGRESSING"
+            else:
+                overall_status = "OTHER"
+
+            # Update PVs
+            self.service_status[service_name]["app_status"] = overall_status
+            self.service_pvs[service_name]["APP_STATUS"].set(overall_status)
+            self.service_pvs[service_name]["SYNC_STATUS"].set(sync_value)
+            self.service_pvs[service_name]["HEALTH_STATUS"].set(health_value)
+
+            # Update timestamp PVs
+            try:
+                self.service_pvs[service_name]["LAST_SYNC"].set(
+                    self.service_status[service_name]["last_sync_time"]
+                )
+            except Exception as e:
+                self.logger.debug(f"Error setting LAST_SYNC for {service_name}: {e}")
+
+            try:
+                self.service_pvs[service_name]["LAST_HEALTH"].set(
+                    self.service_status[service_name]["last_health_change"]
+                )
+            except Exception as e:
+                self.logger.debug(f"Error setting LAST_HEALTH for {service_name}: {e}")
+
+        except Exception as e:
+            self.logger.error(
+                f"Error updating service status for {service_name}: {e}", exc_info=True
+            )
+            self.service_status[service_name]["app_status"] = "ERROR"
+            self.service_status[service_name]["sync_status"] = "Unknown"
+            self.service_status[service_name]["health_status"] = "Error"
+            self.service_pvs[service_name]["APP_STATUS"].set("ERROR")
+            self.service_pvs[service_name]["SYNC_STATUS"].set(3)  # Red
+            self.service_pvs[service_name]["HEALTH_STATUS"].set(3)  # Red
+
+    def _update_all_service_status(self):
+        """Update status for all services by querying ArgoCD applications."""
+        if not self.api:
+            return
+
+        # List all applications in the ArgoCD namespace
+        try:
+            apps = self.api.list_namespaced_custom_object(
+                group="argoproj.io",
+                version="v1alpha1",
+                namespace=self.argocd_namespace,
+                plural="applications",
+            )
+
+            app_items = apps.get("items", [])
+
+            # Create a map of application names to app data
+            app_map = {}
+            for app in app_items:
+                app_name = app["metadata"]["name"]
+                app_map[app_name] = app
+
+            # Update status for each tracked service
+            for service_name in self.service_status.keys():
+                # Get the ArgoCD application name for this service
+                argocd_app_name = self.service_to_app_name.get(
+                    service_name, service_name
+                )
+                self._update_service_status(service_name, app_map.get(argocd_app_name))
+
+        except ApiException as e:
+            self.logger.error(f"Error listing ArgoCD applications: {e}")
+        except Exception as e:
+            self.logger.error(
+                f"Unexpected error updating service status: {e}", exc_info=True
             )
 
     def _update_ioc_status(self, ioc_name: str, app_data: Optional[Dict]):
@@ -677,9 +1114,58 @@ class IocmngTask(TaskBase):
                     self._stop_ioc(ioc_name)
                 elif action == "RESTART":
                     self._restart_ioc(ioc_name)
+
+                # Wait 1 second and update status after the action
+                time.sleep(1)
+                self._process_cycle()
+
             except Exception as e:
                 self.logger.error(
                     f"Error executing {action} for {ioc_name}: {e}", exc_info=True
+                )
+
+    def _process_service_control_queue(self):
+        """Process pending service control actions."""
+        if not self.api:
+            return
+
+        with self.service_control_lock:
+            queue_copy = self.service_control_queue[:]
+            self.service_control_queue.clear()
+
+        for service_name, action in queue_copy:
+            self.logger.info(
+                f"Processing service control action: {action} for {service_name}"
+            )
+
+            try:
+                # Get the ArgoCD application name for this service
+                argocd_app_name = self.service_to_app_name.get(
+                    service_name, service_name
+                )
+
+                if action == "START":
+                    # For services, START means sync the application
+                    self._sync_argocd_application(argocd_app_name)
+                elif action == "STOP":
+                    # For services, STOP means delete the application
+                    self._delete_argocd_application(argocd_app_name)
+                elif action == "RESTART":
+                    # For services, RESTART means delete and sync to redeploy
+                    self._restart_argocd_application(argocd_app_name)
+                else:
+                    self.logger.warning(
+                        f"Unknown service control action: {action} for {service_name}"
+                    )
+
+                # Wait 1 second and update status after the action
+                time.sleep(1)
+                self._process_cycle()
+
+            except Exception as e:
+                self.logger.error(
+                    f"Error processing service control action for {service_name}: {e}",
+                    exc_info=True,
                 )
 
     def _start_ioc(self, ioc_name: str):
@@ -711,57 +1197,50 @@ class IocmngTask(TaskBase):
             self.logger.error(f"Error starting IOC {ioc_name}: {e}")
 
     def _stop_ioc(self, ioc_name: str):
-        """Stop (suspend) an IOC application."""
+        """Stop (delete) an IOC application."""
         try:
             # Get the ArgoCD application name for this IOC
             argocd_app_name = self.ioc_to_app_name.get(ioc_name, ioc_name)
 
-            # Get current app
-            app = self.api.get_namespaced_custom_object(
+            # Delete the application
+            self.api.delete_namespaced_custom_object(
                 group="argoproj.io",
                 version="v1alpha1",
                 namespace=self.argocd_namespace,
                 plural="applications",
                 name=argocd_app_name,
-            )
-
-            # Patch to suspend auto-sync
-            body = {"spec": {"syncPolicy": {"automated": None}}}
-
-            self.api.patch_namespaced_custom_object(
-                group="argoproj.io",
-                version="v1alpha1",
-                namespace=self.argocd_namespace,
-                plural="applications",
-                name=argocd_app_name,
-                body=body,
             )
 
             self.logger.info(
-                f"Stopped (suspended auto-sync) IOC: {ioc_name} (ArgoCD app: {argocd_app_name})"
+                f"Stopped (deleted) IOC: {ioc_name} (ArgoCD app: {argocd_app_name})"
             )
         except ApiException as e:
             self.logger.error(f"Error stopping IOC {ioc_name}: {e}")
 
     def _restart_ioc(self, ioc_name: str):
-        """Restart an IOC application (hard refresh)."""
+        """Restart an IOC application (delete and sync to redeploy)."""
         try:
             # Get the ArgoCD application name for this IOC
             argocd_app_name = self.ioc_to_app_name.get(ioc_name, ioc_name)
 
-            # Trigger a hard refresh by adding annotation
-            body = {"metadata": {"annotations": {"argocd.argoproj.io/refresh": "hard"}}}
+            # First delete the application
+            try:
+                self.api.delete_namespaced_custom_object(
+                    group="argoproj.io",
+                    version="v1alpha1",
+                    namespace=self.argocd_namespace,
+                    plural="applications",
+                    name=argocd_app_name,
+                )
+                self.logger.info(
+                    f"Deleted IOC application for restart: {argocd_app_name}"
+                )
+            except ApiException as e:
+                self.logger.warning(
+                    f"Could not delete IOC application {argocd_app_name} for restart: {e}"
+                )
 
-            self.api.patch_namespaced_custom_object(
-                group="argoproj.io",
-                version="v1alpha1",
-                namespace=self.argocd_namespace,
-                plural="applications",
-                name=argocd_app_name,
-                body=body,
-            )
-
-            # Also trigger a sync
+            # Then sync to redeploy
             sync_body = {
                 "operation": {
                     "initiatedBy": {"username": "beamline-controller"},
@@ -783,6 +1262,89 @@ class IocmngTask(TaskBase):
             )
         except ApiException as e:
             self.logger.error(f"Error restarting IOC {ioc_name}: {e}")
+
+    def _sync_argocd_application(self, argocd_app_name: str):
+        """Sync an ArgoCD application."""
+        try:
+            body = {
+                "operation": {
+                    "initiatedBy": {"username": "beamline-controller"},
+                    "sync": {"revision": "HEAD", "prune": True},
+                }
+            }
+
+            self.api.patch_namespaced_custom_object(
+                group="argoproj.io",
+                version="v1alpha1",
+                namespace=self.argocd_namespace,
+                plural="applications",
+                name=argocd_app_name,
+                body=body,
+            )
+            self.logger.info(f"Synced ArgoCD application: {argocd_app_name}")
+        except ApiException as e:
+            self.logger.error(
+                f"Error syncing ArgoCD application {argocd_app_name}: {e}"
+            )
+
+    def _delete_argocd_application(self, argocd_app_name: str):
+        """Delete an ArgoCD application."""
+        try:
+            self.api.delete_namespaced_custom_object(
+                group="argoproj.io",
+                version="v1alpha1",
+                namespace=self.argocd_namespace,
+                plural="applications",
+                name=argocd_app_name,
+            )
+            self.logger.info(f"Deleted ArgoCD application: {argocd_app_name}")
+        except ApiException as e:
+            self.logger.error(
+                f"Error deleting ArgoCD application {argocd_app_name}: {e}"
+            )
+
+    def _restart_argocd_application(self, argocd_app_name: str):
+        """Restart an ArgoCD application (delete and sync to redeploy)."""
+        try:
+            # First delete the application
+            try:
+                self.api.delete_namespaced_custom_object(
+                    group="argoproj.io",
+                    version="v1alpha1",
+                    namespace=self.argocd_namespace,
+                    plural="applications",
+                    name=argocd_app_name,
+                )
+                self.logger.info(
+                    f"Deleted ArgoCD application for restart: {argocd_app_name}"
+                )
+            except ApiException as e:
+                self.logger.warning(
+                    f"Could not delete ArgoCD application {argocd_app_name} for restart: {e}"
+                )
+
+            # Then sync to redeploy
+            sync_body = {
+                "operation": {
+                    "initiatedBy": {"username": "beamline-controller"},
+                    "sync": {"revision": "HEAD", "prune": True},
+                }
+            }
+
+            self.api.patch_namespaced_custom_object(
+                group="argoproj.io",
+                version="v1alpha1",
+                namespace=self.argocd_namespace,
+                plural="applications",
+                name=argocd_app_name,
+                body=sync_body,
+            )
+
+            self.logger.info(f"Restarted ArgoCD application: {argocd_app_name}")
+        except ApiException as e:
+            self.logger.error(
+                f"Error restarting ArgoCD application {argocd_app_name}: {e}"
+            )
 
     def cleanup(self):
         """Cleanup when task stops."""

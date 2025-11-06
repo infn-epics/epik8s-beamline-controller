@@ -204,6 +204,7 @@ epicsConfiguration:
     olog: 
       loglevel: DEBUG
       charturl: https://baltig.infn.it/epics-containers/phoebus-services-chart.git
+      targetRevision: "test-olog-saveandrestore"
       phoebusservice: "olog"
       auto_security: true
       enable_ingress: true
@@ -363,6 +364,17 @@ epicsConfiguration:
         name: "default"
   
   iocs:
+    - name: "beamline-controller"
+      charturl: 'https://github.com/infn-epics/ioc-chart.git'
+      image: ghcr.io/infn-epics/epics-py-base
+      iocprefix: "SPARC:CONTROL"
+      devtype: softioc
+      devgroup: global
+      start: "start.sh"
+      serviceAccountName: "argocd-manager"
+      gitinit: true
+      autosync: false ## restart automatically on changes
+
     - name: "llrfs01"
       asset: "https://confluence.infn.it/x/doKBBg"
       charturl: 'https://github.com/infn-epics/ioc-chart.git' 
@@ -733,6 +745,10 @@ epicsConfiguration:
           value: "11049"
         - name: "ENV:ENV_KY_SP"
           value: "11049"
+        - name: "ENV:ENV_X_OFFSET_SP"
+          value: "1900"
+        - name: "ENV:ENV_Y_OFFSET_SP"
+          value: "2800"
         - name: "ENV:ENV_KA_SP"
           value: "10000000"
         - name: "ENV:ENV_KB_SP"
@@ -766,6 +782,10 @@ epicsConfiguration:
           value: "11049"
         - name: "ENV:ENV_KY_SP"
           value: "11049"
+        - name: "ENV:ENV_X_OFFSET_SP"
+          value: "200"
+        - name: "ENV:ENV_Y_OFFSET_SP"
+          value: "-1000"
         - name: "ENV:ENV_KA_SP"
           value: "10000000"
         - name: "ENV:ENV_KB_SP"
@@ -799,6 +819,10 @@ epicsConfiguration:
           value: "11049"
         - name: "ENV:ENV_KY_SP"
           value: "11049"
+        - name: "ENV:ENV_X_OFFSET_SP"
+          value: "-2000"
+        - name: "ENV:ENV_Y_OFFSET_SP"
+          value: "8900"
         - name: "ENV:ENV_KA_SP"
           value: "10000000"
         - name: "ENV:ENV_KB_SP"
@@ -832,6 +856,10 @@ epicsConfiguration:
           value: "11049"
         - name: "ENV:ENV_KY_SP"
           value: "11049"
+        - name: "ENV:ENV_X_OFFSET_SP"
+          value: "-1600"
+        - name: "ENV:ENV_Y_OFFSET_SP"
+          value: "-200"
         - name: "ENV:ENV_KA_SP"
           value: "10000000"
         - name: "ENV:ENV_KB_SP"
@@ -858,7 +886,7 @@ epicsConfiguration:
       scpoptions: "-O"
       workdir: "/opt/sparc-template-sppp"
       exec: "start.sh"
-      autosync: true ## restart automatically on changes
+      autosync: false ## restart automatically on changes
       initcmd: "mount -o remount,rw /"
       iocinit:
         - name: "ENV:ENV_KX_SP"
@@ -1241,12 +1269,49 @@ epicsConfiguration:
         - name: "TEST"
           devtype: rtd
           desc: "TEST"
-          channel: 4
+          channel: 5
           high: 80
           low: 10
           lolo: 5
           hihi: 90
-      gitinit: true
+      devtype: icp7215
+      devgroup: io
+      autosync: true ## restart automatically on changes
+
+    - name: "sparctempsld"
+      asset: ""
+      charturl: 'https://github.com/infn-epics/ioc-chart.git'
+      iocprefix: "SPARC:TEMP"
+      iocroot: "ICP05"
+      template: "icpdas"
+      opi: "icpdas-opi/icp7215.bob"
+      iocparam:
+        - name: "server"
+          value: ddcgicp006.lnf.infn.it
+      devices:
+        - name: "SLD01" 
+          devtype: rtd
+          channel: 0
+          high: 55
+          low: 15
+          lolo: 10
+          hihi: 60
+        - name: "SLD02" #anticamera laser
+          devtype: rtd
+          channel: 1
+          high: 55
+          low: 15
+          lolo: 10
+          hihi: 60
+
+        - name: "TEST"
+          devtype: rtd
+          desc: "TEST"
+          channel: 5
+          high: 80
+          low: 10
+          lolo: 5
+          hihi: 90
       devtype: icp7215
       devgroup: io
       autosync: true ## restart automatically on changes
@@ -2275,7 +2340,7 @@ epicsConfiguration:
               - name: DlyGen3Label-I
                 value: "Valve"
               - name: DlyGen4Delay-SP
-                value: 8800.0
+                value: 8980.00
               - name: DlyGen4Width-SP
                 value: 500.0
               - name: DlyGen4Label-I
@@ -2433,7 +2498,7 @@ epicsConfiguration:
             jvel: 30
             hvel: 30
             poi:
-            - name: "yag"
+            - name: "YAG"
               value: 688640
             - name: "calibration"
               value: 688640
@@ -2442,7 +2507,7 @@ epicsConfiguration:
           - name: "AC1FLG01"
             axid: 3
             poi:
-            - name: "yag"
+            - name: "YAG"
               value: 670000
               default: true
             - name: "calibration"
@@ -2453,7 +2518,7 @@ epicsConfiguration:
             jvel: 40
             hvel: 40
             poi:
-            - name: "yag"
+            - name: "YAG"
               value: 3337720
             - name: "calibration"
               value: 2800000
@@ -2465,7 +2530,7 @@ epicsConfiguration:
             jvel: 40
             hvel: 40
             poi:
-            - name: "yag"
+            - name: "YAG"
               value: 2275560
             - name: "calibration"
               value: 1575560
@@ -2475,18 +2540,18 @@ epicsConfiguration:
             jvel: 40
             hvel: 40
             poi:
-            - name: "yag"
+            - name: "YAG"
               value: 3000000
             - name: "calibration"
               value: 2500000
           - name: UTLFLG02
             axid: 13
             poi:
-            - name: "yag"
+            - name: "YAG"
               value: 1190000
             - name: "calibration"
               value: 992160
-            - name: "otr"
+            - name: "OTR"
               value: 410000
           - name: SBNFLG00
             axid: 11
@@ -2495,7 +2560,7 @@ epicsConfiguration:
             hvel: 40
             zones: SABINA
             poi:
-            - name: "yag"
+            - name: "YAG"
               value: 3100000
             - name: "calibration"
               value: 3100000
@@ -2506,8 +2571,8 @@ epicsConfiguration:
             hvel: 40
             zones: SABINA
             poi:
-            - name: "yag"
-              value: 2975310
+            - name: "YAG"
+              value: 2825310
             - name: "calibration"
               value: 2264680
           - name: GUNSOLH1
@@ -2543,71 +2608,77 @@ epicsConfiguration:
         velo: 20
         hvel: 20
       devices:
-          - name: CMBROH01
-            axid: 1
-            velo: 10
-            jvel: 10
-            hvel: 10
           - name: CMBEOS01
             axid: 2
             velo: 40
             jvel: 40
             hvel: 40
             poi:
-            - name: "yag"
+            - name: "YAG"
               value: 4968360
             - name: "calibration"
               value: 4407960
             - name: "mirror"
-              value: 1006420
-            - name: "znte"
+              value: 996420
+            - name: "ZnTe"
               value: 111111
-            - name: "gap"
+            - name: "GaP"
               value: 222222
+          - name: CMBPQV01
+            axid: 6
+            poi:
+            - name: "PMQ"
+              value: 526040
+          - name: CMBPQV02
+            axid: 7
+            poi:
+            - name: "PMQ"
+              value: 560520
+          - name: CMBPLV01
+            axid: 8
+            poi:
+            - name: "YAG"
+              value: 212000
+            - name: "calibration"
+              value: 332000
+            - name: "OTR"
+              value: 342000
+            - name: "capillary"
+              value: 586550
           - name: CMBTHV01
             axid: 3
             poi:
-            - name: "yag"
+            - name: "YAG"
               value: 1000000000
             - name: "calibration"
               value: 1325000
-            - name: "otr"
+            - name: "OTR"
               value: 300000
+          - name: CMBPQH01
+            axid: 5
           - name: CMBPQH02
             axid: 4
             velo_max: 300
             velo: 200
             jvel: 200
             hvel: 200
-          - name: CMBPQH01
-            axid: 5
-          - name: CMBPQV01
-            axid: 6
-          - name: CMBPQV02 
-            axid: 7
-          - name: CMBPLV01
-            axid: 8
-            poi:
-            - name: "yag"
-              value: 212000
-            - name: "calibration"
-              value: 332000
-            - name: "otr"
-              value: 372000
-            - name: "capillary"
-              value: 606000
           - name: CMBROV01
             axid: 9
             velo: 10
             jvel: 10
             hvel: 10
-          - name: CMBTHR01
-            axid: 10
           - name: CMBTRH01
             axid: 255
             velo: 10
             jvel: 10
             hvel: 10
+          - name: CMBROH01
+            axid: 1
+            velo: 10
+            jvel: 10
+            hvel: 10
+          - name: CMBTHR01
+            axid: 10
 
     - name: "tml-ch3"
       asset: "https://confluence.infn.it/x/nYD8DQ"
@@ -2634,10 +2705,6 @@ epicsConfiguration:
         velo: 40
         hvel: 40
       devices:
-        - axid: 7
-          name: RFDATT01
-        - axid: 8
-          name: RFDPHS01
         - axid: 3
           name: W2BPHS01
           poi:
@@ -2645,6 +2712,10 @@ epicsConfiguration:
               value: 689306   #859306
             - name: "compression"
               value: 1249306
+        - axid: 7
+          name: RFDATT01
+        - axid: 8
+          name: RFDPHS01
       autosync: false ## restart automatically on changes
       disable: false ## dont deploy
 
@@ -2921,9 +2992,14 @@ epicsConfiguration:
       iocprefix: "SPARC:CAM"
       autosync: false ## restart automatically on changes
       template: "adcamera"
+      service:   
+        http:
+          enable: true
+          port: 8082
+      stream_enable: true
       networks:
         - name: "control"
-          annotation: "sparc-cams"
+          annotation: "sparc-br-cams"
       iocinit: ## for all cameras
         - name: "PixelFormat"
           value: "Mono16"
@@ -2979,9 +3055,14 @@ epicsConfiguration:
       iocprefix: "SPARC:CAM"
       autosync: false ## restart automatically on changes
       template: "adcamera"
+      service:   
+        http:
+          enable: true
+          port: 8082
+      stream_enable: true
       networks:
         - name: "control"
-          annotation: "sparc-cams"
+          annotation: "sparc-br-cams"
       iocinit: ## for all cameras
         - name: "PixelFormat"
           value: "Mono16"
@@ -3017,7 +3098,13 @@ epicsConfiguration:
           iocinit:
             - name: "pxcal"
               value: 9.0
-    
+        - name: "PLV01"
+          id: 192.168.110.32 #Basler-scA640-74gm-21002010
+          devtype: Basler-scA640-70gm
+          iocinit:
+            - name: "pxcal"
+              value: 7.4
+
     # docker network create -d macvlan --subnet 192.168.110.0/24 --gateway 192.168.110.1 --interface-name enp1s0f1 --ip-range 192.168.110.2/28 gigevision-network
     - name: "plvcameras"
       asset: "https://confluence.infn.it/x/nYD8DQ"
@@ -3028,9 +3115,14 @@ epicsConfiguration:
       devgroup: cam
       iocprefix: "SPARC:CAM"
       autosync: false ## restart automatically on changes
+      service:   
+        http:
+          enable: true
+          port: 8082
+      stream_enable: true
       networks:
         - name: "control"
-          annotation: "sparc-cams"
+          annotation: "sparc-br-cams"
       iocinit: ## for all cameras
         - name: "PixelFormat"
           value: "Mono16"
@@ -3064,12 +3156,6 @@ epicsConfiguration:
               value: "Mono12"
             - name: "pxcal"
               value: 1.81
-        - name: "PLV01"
-          id: 192.168.110.32 #Basler-scA640-74gm-21002010
-          devtype: Basler-scA640-70gm
-          iocinit:
-            - name: "pxcal"
-              value: 7.4
 
     - name: "gunthvcameras"
       asset: "https://confluence.infn.it/x/nYD8DQ"
@@ -3080,9 +3166,14 @@ epicsConfiguration:
       devgroup: cam
       iocprefix: "SPARC:CAM"
       autosync: false ## restart automatically on changes
+      service:   
+        http:
+          enable: true
+          port: 8082
+      stream_enable: true
       networks:
         - name: "control"
-          annotation: "sparc-cams"
+          annotation: "sparc-br-cams"
       iocinit: ## for all cameras
         - name: "PixelFormat"
           value: "Mono16"
@@ -3119,7 +3210,7 @@ epicsConfiguration:
             - name: "pxcal"
               value: 35.21
         - name: "THV02"
-          id: 192.168.110.29 # Basler-scA640-70gm-21732894
+          id: 192.168.110.39 # Basler-scA640-70gm-21278019
           devtype: Basler-scA640-70gm
           iocinit:
             - name: "pxcal"
@@ -3134,9 +3225,14 @@ epicsConfiguration:
       devgroup: cam
       iocprefix: "SPARC:CAM"
       autosync: false ## restart automatically on changes
+      service:   
+        http:
+          enable: true
+          port: 8082
+      stream_enable: true
       networks:
         - name: "control"
-          annotation: "sparc-cams"
+          annotation: "sparc-br-cams"
       iocinit: ## for dglutl
         - name: "PixelFormat"
           value: "Mono16"
@@ -3182,9 +3278,14 @@ epicsConfiguration:
       devgroup: cam
       iocprefix: "SPARC:CAM"
       autosync: false ## restart automatically on changes
+      service:   
+        http:
+          enable: true
+          port: 8082
+      stream_enable: true
       networks:
         - name: "control"
-          annotation: "sparc-cams"
+          annotation: "sparc-br-cams"
       iocinit: ## for dglutl
         - name: "PixelFormat"
           value: "Mono16"
@@ -3794,14 +3895,18 @@ backend:
   mongo:
     host: mongodb
     port: 27017
-    user:
-    pwd:
   elasticsearch:
-    host: elasticsearch
+    host: elasticsearch-es-http
     clusterName: elasticsearch
     port: 9200
+    protocol: https
+    pubcertsecret: elasticsearch-es-http-certs-public #secret containing the public cert
+    authorization:
+      username: elastic
+      password: GJkrSqzVRka9PC7b2N2cHmBM
+
   kafka:
-    host: kafka-headless
+    host: eph-kafka-kafka-brokers
     port: 9092
 
 opi:

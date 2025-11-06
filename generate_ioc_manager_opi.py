@@ -729,6 +729,244 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
     return widgets
 
 
+def create_service_row(service_name, prefix, y_pos, namespace=None):
+    """Create widgets for a single service row."""
+    widgets = []
+
+    # Sanitize service name for PV (uppercase, replace hyphens)
+    service_pv_name = service_name.upper().replace("-", "_")
+
+    # Ensure EPICS record name length limits are respected
+    # Mirror the truncation logic used by the service task so PV names match at runtime.
+    try:
+        max_record_length = 60
+        prefix_overhead = len(prefix) + 1  # separator
+        longest_suffix = len("_LAST_HEALTH")
+        max_service_prefix_len = max_record_length - prefix_overhead - longest_suffix
+        if max_service_prefix_len > 0 and len(service_pv_name) > max_service_prefix_len:
+            original = service_pv_name
+            service_pv_name = service_pv_name[:max_service_prefix_len]
+            print(
+                f"Warning: Service PV name '{original}' truncated to '{service_pv_name}' to fit EPICS {max_record_length}-char limit"
+            )
+    except Exception:
+        # On any unexpected error, fall back to the full sanitized name
+        pass
+
+    # Build the expected ArgoCD application name using the beamline namespace
+    app_name = None
+    if namespace:
+        app_name = f"{namespace}-{service_name}"
+    else:
+        app_name = service_name
+
+    # Service Name label
+    widgets.append(
+        create_label(
+            f"Service_{service_pv_name}_Name", service_name, 10, y_pos, 200, 30
+        )
+    )
+
+    # Show the expected ArgoCD application name under the service name (smaller font)
+    widgets.append(
+        create_label(
+            f"Service_{service_pv_name}_AppName",
+            app_name,
+            10,
+            y_pos + 18,
+            300,
+            18,
+            font_size="10.0",
+        )
+    )
+
+    # App Status
+    app_status_widget = create_textupdate(
+        f"Service_{service_pv_name}_AppStatus",
+        f"{prefix}:IOCMNG:{service_pv_name}_APP_STATUS",
+        220,
+        y_pos,
+        100,
+        30,
+        horizontal_alignment=1,
+    )
+    # Add rules for application status background color
+    rules = ET.SubElement(app_status_widget, "rules")
+
+    # Rule for Running -> Green background
+    rule_running = ET.SubElement(rules, "rule", name="Running")
+    ET.SubElement(rule_running, "prop_id").text = "background_color"
+    expr_running = ET.SubElement(rule_running, "expression")
+    ET.SubElement(expr_running, "value").text = 'pv0=="Running"'
+    pv_running = ET.SubElement(expr_running, "pv")
+    ET.SubElement(pv_running, "name").text = "pv0"
+    ET.SubElement(pv_running, "trigger").text = "true"
+    val_running = ET.SubElement(rule_running, "value")
+    val_running.append(create_color(0, 200, 0))  # Green
+
+    widgets.append(app_status_widget)
+
+    # Sync LED
+    sync_led = create_multi_state_led(
+        f"Service_{service_pv_name}_SyncLED",
+        f"{prefix}:IOCMNG:{service_pv_name}_SYNC_STATUS",
+        355,
+        y_pos + 5,
+        20,
+        20,
+    )
+    # Add states for sync status colors
+    states = ET.SubElement(sync_led, "states")
+
+    # State 0: Synced -> Green
+    state_synced = ET.SubElement(states, "state", value="0")
+    color_synced = ET.SubElement(state_synced, "color")
+    color_synced.append(create_color(0, 200, 0))  # Green
+
+    # State 1: OutOfSync -> Yellow
+    state_outofsync = ET.SubElement(states, "state", value="1")
+    color_outofsync = ET.SubElement(state_outofsync, "color")
+    color_outofsync.append(create_color(255, 255, 0))  # Yellow
+
+    # State 2: Unknown -> Orange
+    state_unknown = ET.SubElement(states, "state", value="2")
+    color_unknown = ET.SubElement(state_unknown, "color")
+    color_unknown.append(create_color(255, 140, 0))  # Orange
+
+    # State 3: Error -> Red
+    state_error = ET.SubElement(states, "state", value="3")
+    color_error = ET.SubElement(state_error, "color")
+    color_error.append(create_color(200, 0, 0))  # Red
+
+    widgets.append(sync_led)  # Sync Status text
+    widgets.append(
+        create_textupdate(
+            f"Service_{service_pv_name}_SyncStatus",
+            f"{prefix}:IOCMNG:{service_pv_name}_SYNC_STATUS",
+            380,
+            y_pos,
+            50,
+            30,
+            horizontal_alignment=1,
+        )
+    )
+
+    # Health LED
+    health_led = create_multi_state_led(
+        f"Service_{service_pv_name}_HealthLED",
+        f"{prefix}:IOCMNG:{service_pv_name}_HEALTH_STATUS",
+        465,
+        y_pos + 5,
+        20,
+        20,
+    )
+    # Add states for health status colors
+    states = ET.SubElement(health_led, "states")
+
+    # State 0: Healthy -> Green
+    state_healthy = ET.SubElement(states, "state", value="0")
+    color_healthy = ET.SubElement(state_healthy, "color")
+    color_healthy.append(create_color(0, 200, 0))  # Green
+
+    # State 1: Progressing -> Yellow
+    state_progressing = ET.SubElement(states, "state", value="1")
+    color_progressing = ET.SubElement(state_progressing, "color")
+    color_progressing.append(create_color(255, 255, 0))  # Yellow
+
+    # State 5: Warning -> Yellow
+    state_warning = ET.SubElement(states, "state", value="5")
+    color_warning = ET.SubElement(state_warning, "color")
+    color_warning.append(create_color(255, 255, 0))  # Yellow
+
+    # Other states (2,3,4,6): Red (fallback color will handle this)
+
+    widgets.append(health_led)  # Health Status text
+    widgets.append(
+        create_textupdate(
+            f"Service_{service_pv_name}_HealthStatus",
+            f"{prefix}:IOCMNG:{service_pv_name}_HEALTH_STATUS",
+            490,
+            y_pos,
+            50,
+            30,
+            horizontal_alignment=1,
+        )
+    )
+
+    # Last Sync Time
+    widgets.append(
+        create_textupdate(
+            f"Service_{service_pv_name}_LastSync",
+            f"{prefix}:IOCMNG:{service_pv_name}_LAST_SYNC",
+            550,
+            y_pos,
+            180,
+            30,
+            horizontal_alignment=1,
+        )
+    )
+
+    # Last Health Change
+    widgets.append(
+        create_textupdate(
+            f"Service_{service_pv_name}_HealthChange",
+            f"{prefix}:IOCMNG:{service_pv_name}_LAST_HEALTH",
+            740,
+            y_pos,
+            180,
+            30,
+            horizontal_alignment=1,
+        )
+    )
+
+    # START button
+    widgets.append(
+        create_action_button(
+            f"Service_{service_pv_name}_Start",
+            "START",
+            f"{prefix}:IOCMNG:{service_pv_name}_START",
+            930,
+            y_pos,
+            100,
+            30,
+            fg_color=create_color(255, 255, 255),
+            bg_color=create_color(0, 150, 0),
+        )
+    )
+
+    # STOP button
+    widgets.append(
+        create_action_button(
+            f"Service_{service_pv_name}_Stop",
+            "STOP",
+            f"{prefix}:IOCMNG:{service_pv_name}_STOP",
+            1040,
+            y_pos,
+            100,
+            30,
+            fg_color=create_color(255, 255, 255),
+            bg_color=create_color(200, 0, 0),
+        )
+    )
+
+    # RESTART button
+    widgets.append(
+        create_action_button(
+            f"Service_{service_pv_name}_Restart",
+            "RESTART",
+            f"{prefix}:IOCMNG:{service_pv_name}_RESTART",
+            1150,
+            y_pos,
+            100,
+            30,
+            fg_color=create_color(255, 255, 255),
+            bg_color=create_color(255, 140, 0),
+        )
+    )
+
+    return widgets
+
+
 def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     """Generate IOC Manager BOB file from beamline configuration."""
 
@@ -766,10 +1004,24 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
 
     print(f"Found {len(iocs)} IOCs in beamline configuration")
 
-    # Calculate display height - fixed for tabbed interface
-    # Title + control + IOC tabs + instructions
+    # Get services list
+    services = []
+    if (
+        "epicsConfiguration" in beamline_config
+        and "services" in beamline_config["epicsConfiguration"]
+    ):
+        services_data = beamline_config["epicsConfiguration"]["services"]
+        if isinstance(services_data, dict):
+            services = list(services_data.keys())
+        elif isinstance(services_data, list):
+            services = services_data
+
+    print(f"Found {len(services)} services in beamline configuration")
+
+    # Calculate display height - increased for combined IOC/service tabs
+    # Title + control + combined tabs + instructions
     row_height = 40  # Still needed for tab content layout
-    display_height = 60 + 120 + 400 + 80  # Fixed height for tabbed layout
+    display_height = 60 + 120 + 600 + 80  # Increased tab area for combined content
 
     # Create root display element
     display = ET.Element("display", version="2.0.0")
@@ -793,7 +1045,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     display.append(
         create_label(
             "Title",
-            "IOC Management - ArgoCD Application Monitor & Control",
+            "IOC & Service Management - ArgoCD Application Monitor & Control",
             10,
             10,
             1380,
@@ -812,7 +1064,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     ET.SubElement(task_group, "x").text = "10"
     ET.SubElement(task_group, "y").text = "60"
     ET.SubElement(task_group, "width").text = "1380"
-    ET.SubElement(task_group, "height").text = "120"
+    ET.SubElement(task_group, "height").text = "140"
     ET.SubElement(task_group, "style").text = "3"
 
     group_bg = ET.SubElement(task_group, "background_color")
@@ -909,26 +1161,131 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
         )
     )
 
-    # Message label and value
+    # Summary counters for services
     task_group.append(
-        create_label("MessageLabel", "Message:", 20, 70, 80, 30, bold=True)
+        create_label(
+            "TotalServicesLabel",
+            "Total Services:",
+            600,
+            70,
+            100,
+            30,
+            bold=True,
+            horizontal_alignment=2,
+        )
     )
     task_group.append(
-        create_textupdate("TaskMessage", f"{prefix}:IOCMNG:MESSAGE", 110, 70, 1250, 30)
+        create_textupdate(
+            "TotalServices", f"{prefix}:IOCMNG:TOTAL_SERVICES", 710, 70, 60, 30
+        )
+    )
+
+    task_group.append(
+        create_label(
+            "ServicesHealthyLabel",
+            "Services Healthy:",
+            780,
+            70,
+            120,
+            30,
+            bold=True,
+            horizontal_alignment=2,
+        )
+    )
+    task_group.append(
+        create_textupdate(
+            "ServicesHealthyCount",
+            f"{prefix}:IOCMNG:SERVICES_HEALTHY_COUNT",
+            910,
+            70,
+            60,
+            30,
+        )
+    )
+
+    task_group.append(
+        create_label(
+            "ServicesProgressingLabel",
+            "Services Progressing:",
+            980,
+            70,
+            140,
+            30,
+            bold=True,
+            horizontal_alignment=2,
+        )
+    )
+    task_group.append(
+        create_textupdate(
+            "ServicesProgressingCount",
+            f"{prefix}:IOCMNG:SERVICES_PROGRESSING_COUNT",
+            1130,
+            70,
+            60,
+            30,
+        )
+    )
+
+    task_group.append(
+        create_label(
+            "ServicesOtherLabel",
+            "Services Other:",
+            1200,
+            70,
+            110,
+            30,
+            bold=True,
+            horizontal_alignment=2,
+        )
+    )
+    task_group.append(
+        create_textupdate(
+            "ServicesOtherCount",
+            f"{prefix}:IOCMNG:SERVICES_OTHER_COUNT",
+            1320,
+            70,
+            60,
+            30,
+        )
+    )
+
+    # Message label and value
+    task_group.append(
+        create_label("MessageLabel", "Message:", 20, 100, 80, 30, bold=True)
+    )
+    task_group.append(
+        create_textupdate("TaskMessage", f"{prefix}:IOCMNG:MESSAGE", 110, 100, 1250, 30)
     )
 
     display.append(task_group)
 
-    # Parse devgroups from beamline config
-    devgroups = set()
+    # Parse devgroups from beamline config - combine IOCs and services
+    all_devgroups = set()
+
+    # Get IOC devgroups
     for ioc in iocs:
         if isinstance(ioc, dict):
             devgroup = ioc.get("devgroup", "default")
-            devgroups.add(devgroup)
-    devgroups = sorted(devgroups)
+            all_devgroups.add(devgroup)
 
-    # Group IOCs by devgroup
+    # Get service devgroups
+    if (
+        "epicsConfiguration" in beamline_config
+        and "services" in beamline_config["epicsConfiguration"]
+    ):
+        services_data = beamline_config["epicsConfiguration"]["services"]
+        if isinstance(services_data, dict):
+            for service_name, service_config in services_data.items():
+                if isinstance(service_config, dict):
+                    devgroup = service_config.get("devgroup", "services")
+                    all_devgroups.add(devgroup)
+
+    all_devgroups = sorted(all_devgroups)
+
+    # Group IOCs and services by devgroup
     iocs_by_devgroup = {}
+    services_by_devgroup = {}
+
     for ioc in iocs:
         devgroup = (
             ioc.get("devgroup", "default") if isinstance(ioc, dict) else "default"
@@ -937,19 +1294,35 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
             iocs_by_devgroup[devgroup] = []
         iocs_by_devgroup[devgroup].append(ioc)
 
-    # IOC Status & Control Tabs
-    ioc_tabs_widget = ET.Element("widget", type="tabs", version="2.0.0")
-    ET.SubElement(ioc_tabs_widget, "name").text = "IOCTabs"
-    ET.SubElement(ioc_tabs_widget, "x").text = "10"
-    ET.SubElement(ioc_tabs_widget, "y").text = "190"
-    ET.SubElement(ioc_tabs_widget, "width").text = "1380"
-    ET.SubElement(ioc_tabs_widget, "height").text = str(display_height - 190)
+    if (
+        "epicsConfiguration" in beamline_config
+        and "services" in beamline_config["epicsConfiguration"]
+    ):
+        services_data = beamline_config["epicsConfiguration"]["services"]
+        if isinstance(services_data, dict):
+            for service_name, service_config in services_data.items():
+                devgroup = (
+                    service_config.get("devgroup", "services")
+                    if isinstance(service_config, dict)
+                    else "services"
+                )
+                if devgroup not in services_by_devgroup:
+                    services_by_devgroup[devgroup] = []
+                services_by_devgroup[devgroup].append(service_name)
+
+    # IOC & Service Status & Control Tabs
+    app_tabs_widget = ET.Element("widget", type="tabs", version="2.0.0")
+    ET.SubElement(app_tabs_widget, "name").text = "ApplicationTabs"
+    ET.SubElement(app_tabs_widget, "x").text = "10"
+    ET.SubElement(app_tabs_widget, "y").text = "190"
+    ET.SubElement(app_tabs_widget, "width").text = "1380"
+    ET.SubElement(app_tabs_widget, "height").text = str(display_height - 190)
 
     # Tabs container
-    ioc_tabs_container = ET.SubElement(ioc_tabs_widget, "tabs")
+    app_tabs_container = ET.SubElement(app_tabs_widget, "tabs")
 
     # Add ALL tab first
-    all_tab = ET.SubElement(ioc_tabs_container, "tab")
+    all_tab = ET.SubElement(app_tabs_container, "tab")
     ET.SubElement(all_tab, "name").text = "ALL"
     all_children = ET.SubElement(all_tab, "children")
 
@@ -957,10 +1330,10 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     all_children.append(
         create_label(
             "AllTableHeader",
-            "IOC Status & Control - All IOCs",
+            "IOC & Service Status & Control - All Applications",
             10,
             10,
-            300,
+            400,
             30,
             font_name="Header 2",
             font_size="18.0",
@@ -978,9 +1351,17 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
             all_children.append(widget)
         y_pos += row_height
 
+    # Add service rows for ALL tab
+    for service_name in services:
+        for widget in create_service_row(
+            service_name, prefix, y_pos, namespace=namespace
+        ):
+            all_children.append(widget)
+        y_pos += row_height
+
     # Add tabs for each devgroup
-    for devgroup in sorted(iocs_by_devgroup.keys()):
-        tab = ET.SubElement(ioc_tabs_container, "tab")
+    for devgroup in sorted(all_devgroups):
+        tab = ET.SubElement(app_tabs_container, "tab")
         ET.SubElement(tab, "name").text = devgroup.upper()
         children = ET.SubElement(tab, "children")
 
@@ -988,10 +1369,10 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
         children.append(
             create_label(
                 f"{devgroup}TableHeader",
-                f"IOC Status & Control - {devgroup.upper()}",
+                f"IOC & Service Status & Control - {devgroup.upper()}",
                 10,
                 10,
-                300,
+                400,
                 30,
                 font_name="Header 2",
                 font_size="18.0",
@@ -1003,13 +1384,25 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
 
         # Add IOC rows for this devgroup
         y_pos = 85
-        for ioc in iocs_by_devgroup[devgroup]:
-            ioc_name = ioc.get("name", "unknown")
-            for widget in create_ioc_row(ioc_name, prefix, y_pos, namespace=namespace):
-                children.append(widget)
-            y_pos += row_height
+        if devgroup in iocs_by_devgroup:
+            for ioc in iocs_by_devgroup[devgroup]:
+                ioc_name = ioc.get("name", "unknown")
+                for widget in create_ioc_row(
+                    ioc_name, prefix, y_pos, namespace=namespace
+                ):
+                    children.append(widget)
+                y_pos += row_height
 
-    display.append(ioc_tabs_widget)
+        # Add service rows for this devgroup
+        if devgroup in services_by_devgroup:
+            for service_name in services_by_devgroup[devgroup]:
+                for widget in create_service_row(
+                    service_name, prefix, y_pos, namespace=namespace
+                ):
+                    children.append(widget)
+                y_pos += row_height
+
+    display.append(app_tabs_widget)
 
     # Instructions footer
     instructions = ET.Element("widget", type="group", version="3.0.0")
@@ -1026,7 +1419,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     instructions.append(
         create_label(
             "InstructionsText",
-            f"Generated for {len(iocs)} IOCs from beamline configuration.\n"
+            f"Generated for {len(iocs)} IOCs and {len(services)} services from beamline configuration.\n"
             "Color indicators: Green = Healthy/Synced, Red = Unhealthy/OutOfSync, Yellow = Warning/Progressing\n"
             "Actions: START enables ArgoCD sync, STOP suspends application, RESTART performs hard refresh",
             10,
@@ -1058,6 +1451,10 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
         ioc_name = ioc.get("name", "unknown")
         app_expected = f"{namespace}-{ioc_name}-ioc" if namespace else f"{ioc_name}-ioc"
         print(f"    * {ioc_name}  =>  ArgoCD app: {app_expected}")
+    print(f"  - Services: {len(services)}")
+    for service_name in services:
+        app_expected = f"{namespace}-{service_name}" if namespace else service_name
+        print(f"    * {service_name}  =>  ArgoCD app: {app_expected}")
 
 
 def main():
