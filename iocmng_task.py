@@ -150,11 +150,6 @@ class IocmngTask(TaskBase):
             # Try in-cluster config first
             k8s_config.load_incluster_config()
             self.logger.info("Loaded in-cluster Kubernetes configuration")
-            # If running in-cluster, disable proxy environment variables
-            try:
-                self._disable_k8s_proxy_env()
-            except Exception:
-                pass
         except Exception as e:
             self.logger.warning(f"Could not load in-cluster config: {e}")
             try:
@@ -193,6 +188,13 @@ class IocmngTask(TaskBase):
 
         self.api = client.CustomObjectsApi()
 
+        # Disable proxy environment variables for Kubernetes API access
+        # This is needed regardless of in-cluster or external config
+        try:
+            self._disable_k8s_proxy_env()
+        except Exception:
+            pass
+
         # Create PVs for devgroups, IOCs, and services
         self._create_pvs()
 
@@ -211,7 +213,7 @@ class IocmngTask(TaskBase):
         self.set_message("Initialized and monitoring")
 
     def _disable_k8s_proxy_env(self):
-        """Temporarily remove proxy environment variables to allow direct in-cluster API access."""
+        """Temporarily remove proxy environment variables to allow direct Kubernetes API access."""
         try:
             if getattr(self, "_k8s_proxy_disabled", False):
                 return
@@ -228,7 +230,7 @@ class IocmngTask(TaskBase):
                     self._k8s_saved_proxy_env[pv] = os.environ.pop(pv)
             self._k8s_proxy_disabled = True
             self.logger.info(
-                "Disabled proxy environment variables for in-cluster Kubernetes access"
+                "Disabled proxy environment variables for Kubernetes API access"
             )
         except Exception as e:
             self.logger.debug(f"Failed to modify proxy env vars: {e}")
@@ -1467,6 +1469,11 @@ class IocmngTask(TaskBase):
     def cleanup(self):
         """Cleanup when task stops."""
         self.logger.info("Cleaning up IOC status task")
+        # Restore proxy environment variables if they were disabled
+        try:
+            self._restore_k8s_proxy_env()
+        except Exception:
+            pass
         self.set_status("END")
         self.set_message("Stopped")
 
