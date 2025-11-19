@@ -116,6 +116,12 @@ class IocmngTask(TaskBase):
             self.set_message("Kubernetes library not available")
             return
 
+        # Disable proxy environment variables early to prevent urllib3 from using them
+        try:
+            self._disable_k8s_proxy_env()
+        except Exception:
+            pass
+
         # Get configuration parameters
         self.update_rate = self.parameters.get(
             "update_rate", 0.05
@@ -187,13 +193,6 @@ class IocmngTask(TaskBase):
                 return
 
         self.api = client.CustomObjectsApi()
-
-        # Disable proxy environment variables for Kubernetes API access
-        # This is needed regardless of in-cluster or external config
-        try:
-            self._disable_k8s_proxy_env()
-        except Exception:
-            pass
 
         # Create PVs for devgroups, IOCs, and services
         self._create_pvs()
