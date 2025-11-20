@@ -1443,10 +1443,10 @@ class IocmngTask(TaskBase):
                 "Skipping archiver status update - requests not available"
             )
             return
-
+        mgmt_url = f"{self.archiver_url}/mgmt/bpl/getApplianceMetrics"
         try:
             # Get appliance metrics from archiver
-            mgmt_url = f"{self.archiver_url}/mgmt/bpl/getApplianceMetrics"
+           
             params = {}
             if self.archiver_appliance != "default":
                 params["appliance"] = self.archiver_appliance
@@ -1483,7 +1483,7 @@ class IocmngTask(TaskBase):
             )
 
         except requests.exceptions.RequestException as e:
-            self.logger.warning(f"Error accessing archiver API: {e}")
+            self.logger.warning(f"Error accessing archiver API {mgmt_url}: {e}")
             try:
                 if "ARCHIVER_STATUS" in self.pvs:
                     self.pvs["ARCHIVER_STATUS"].set("Disconnected")
