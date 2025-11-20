@@ -623,7 +623,7 @@ def create_service_row(service_name, prefix, y_pos, task_name="IOCMNG", namespac
     # Health LED
     health_led = create_multi_state_led(
         f"Service_{service_pv_name}_HealthLED",
-        f"{prefix}:{task_name}:{service_pv_name}_HEALTH_STATUS",
+        f"{prefix}:{task_name}:{service_pv_name}_HEALTH_STAT",
         465,
         y_pos + 5,
         20,
@@ -653,7 +653,7 @@ def create_service_row(service_name, prefix, y_pos, task_name="IOCMNG", namespac
     widgets.append(
         create_textupdate(
             f"Service_{service_pv_name}_HealthStatus",
-            f"{prefix}:{task_name}:{service_pv_name}_HEALTH_STATUS",
+            f"{prefix}:{task_name}:{service_pv_name}_HEALTH_STAT",
             490,
             y_pos,
             50,

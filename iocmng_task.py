@@ -527,7 +527,7 @@ class IocmngTask(TaskBase):
         )
 
         # Health status (mbbi: Healthy=0, Progressing=1, Degraded=2, Missing=3, Unknown=4, Warning=5, Error=6)
-        ioc_pv_dict["HEALTH_STATUS"] = builder.mbbIn(
+        ioc_pv_dict["HEALTH_STAT"] = builder.mbbIn(
             f"{ioc_prefix}_HEALTH_STAT",
             initial_value=4,
             ZRST="Healthy",
@@ -617,7 +617,7 @@ class IocmngTask(TaskBase):
         )
 
         # Health status (mbbi: Healthy=0, Progressing=1, Degraded=2, Missing=3, Unknown=4, Warning=5, Error=6)
-        service_pv_dict["HEALTH_STATUS"] = builder.mbbIn(
+        service_pv_dict["HEALTH_STAT"] = builder.mbbIn(
             f"{service_prefix}_HEALTH_STAT",
             initial_value=4,
             ZRST="Healthy",
@@ -899,7 +899,7 @@ class IocmngTask(TaskBase):
                 self.service_status[service_name]["health_status"] = "Missing"
                 self.service_pvs[service_name]["APP_STATUS"].set("NOT_FOUND")
                 self.service_pvs[service_name]["SYNC_STATUS"].set(3)  # Red
-                self.service_pvs[service_name]["HEALTH_STATUS"].set(3)  # Red
+                self.service_pvs[service_name]["HEALTH_STAT"].set(3)  # Red
                 return
 
             # Extract status information
@@ -982,7 +982,7 @@ class IocmngTask(TaskBase):
             self.service_status[service_name]["app_status"] = overall_status
             self.service_pvs[service_name]["APP_STATUS"].set(overall_status)
             self.service_pvs[service_name]["SYNC_STATUS"].set(sync_value)
-            self.service_pvs[service_name]["HEALTH_STATUS"].set(health_value)
+            self.service_pvs[service_name]["HEALTH_STAT"].set(health_value)
 
             # Update timestamp PVs
             try:
@@ -1012,7 +1012,7 @@ class IocmngTask(TaskBase):
                 try:
                     self.service_pvs[service_name]["APP_STATUS"].set("ERROR")
                     self.service_pvs[service_name]["SYNC_STATUS"].set(3)  # Red
-                    self.service_pvs[service_name]["HEALTH_STATUS"].set(3)  # Red
+                    self.service_pvs[service_name]["HEALTH_STAT"].set(3)  # Red
                 except Exception as pv_error:
                     self.logger.debug(
                         f"Failed to update error status PVs for {service_name}: {pv_error}"
@@ -1162,9 +1162,9 @@ class IocmngTask(TaskBase):
             health_val = 5  # FVST = Warning
 
         try:
-            pvs["HEALTH_STATUS"].set(health_val)
+            pvs["HEALTH_STAT"].set(health_val)
         except Exception as e:
-            self.logger.debug(f"Error setting HEALTH_STATUS for {ioc_name}: {e}")
+            self.logger.debug(f"Error setting HEALTH_STAT for {ioc_name}: {e}")
 
         # Update timestamps
         try:

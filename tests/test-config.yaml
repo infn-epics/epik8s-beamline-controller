@@ -149,3 +149,5 @@ tasks:
       update_rate: 0.1 # Hz (every 10 seconds)
       argocd_namespace: "argocd"
       archiver_url: "http://sparc-archiver.k8sda.lnf.infn.it"
+      archiver_threshold_restart: 10  # Threshold to restart archiver if connected below this value
+      archiver_wait_restart_min: 5    # wait before restarting archiver (minutes)
