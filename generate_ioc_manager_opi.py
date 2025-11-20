@@ -385,7 +385,7 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
     # Health LED
     health_led = create_multi_state_led(
         f"IOC_{ioc_pv_name}_HealthLED",
-        f"{prefix}:IOCMNG:{ioc_pv_name}_HEALTH_STATUS",
+        f"{prefix}:IOCMNG:{ioc_pv_name}_HEALTH_STAT",
         465,
         y_pos + 5,
         20,
@@ -415,7 +415,7 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
     widgets.append(
         create_textupdate(
             f"IOC_{ioc_pv_name}_HealthStatus",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_HEALTH_STATUS",
+            f"{prefix}:IOCMNG:{ioc_pv_name}_HEALTH_STAT",
             490,
             y_pos,
             50,
@@ -616,7 +616,7 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
     # Health LED
     health_led = create_multi_state_led(
         f"IOC_{ioc_pv_name}_HealthLED",
-        f"{prefix}:IOCMNG:{ioc_pv_name}_HEALTH_STATUS",
+        f"{prefix}:IOCMNG:{ioc_pv_name}_HEALTH_STAT",
         465,
         y_pos + 5,
         20,
@@ -646,7 +646,7 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
     widgets.append(
         create_textupdate(
             f"IOC_{ioc_pv_name}_HealthStatus",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_HEALTH_STATUS",
+            f"{prefix}:IOCMNG:{ioc_pv_name}_HEALTH_STAT",
             490,
             y_pos,
             50,
@@ -854,7 +854,7 @@ def create_service_row(service_name, prefix, y_pos, namespace=None):
     # Health LED
     health_led = create_multi_state_led(
         f"Service_{service_pv_name}_HealthLED",
-        f"{prefix}:IOCMNG:{service_pv_name}_HEALTH_STATUS",
+        f"{prefix}:IOCMNG:{service_pv_name}_HEALTH_STAT",
         465,
         y_pos + 5,
         20,
@@ -884,7 +884,7 @@ def create_service_row(service_name, prefix, y_pos, namespace=None):
     widgets.append(
         create_textupdate(
             f"Service_{service_pv_name}_HealthStatus",
-            f"{prefix}:IOCMNG:{service_pv_name}_HEALTH_STATUS",
+            f"{prefix}:IOCMNG:{service_pv_name}_HEALTH_STAT",
             490,
             y_pos,
             50,
