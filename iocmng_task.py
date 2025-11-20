@@ -465,11 +465,23 @@ class IocmngTask(TaskBase):
 
         # Create status and control PVs for each IOC
         for ioc_name in self.ioc_status.keys():
-            self._create_ioc_specific_pvs(ioc_name)
+            try:
+                self._create_ioc_specific_pvs(ioc_name)
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to create PVs for IOC '{ioc_name}': {e}",
+                    exc_info=True
+                )
 
         # Create status and control PVs for each service
         for service_name in self.service_status.keys():
-            self._create_service_specific_pvs(service_name)
+            try:
+                self._create_service_specific_pvs(service_name)
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to create PVs for service '{service_name}': {e}",
+                    exc_info=True
+                )
 
         # Create archiver monitoring PVs if archiver is configured
         if self.archiver_url:
@@ -563,7 +575,10 @@ class IocmngTask(TaskBase):
 
         self.ioc_pvs[ioc_name] = ioc_pv_dict
 
-        self.logger.debug(f"Created PVs for IOC: {ioc_name}")
+        self.logger.debug(
+            f"Created PVs for IOC: {ioc_name} "
+            f"(prefix: {ioc_prefix}, {len(ioc_pv_dict)} PVs)"
+        )
 
     def _create_service_specific_pvs(self, service_name: str):
         """Create status and control PVs for a specific service."""
@@ -650,7 +665,10 @@ class IocmngTask(TaskBase):
 
         self.service_pvs[service_name] = service_pv_dict
 
-        self.logger.debug(f"Created PVs for service: {service_name}")
+        self.logger.debug(
+            f"Created PVs for service: {service_name} "
+            f"(prefix: {service_prefix}, {len(service_pv_dict)} PVs)"
+        )
 
     def _create_archiver_pvs(self):
         """Create PVs for EPICS Archiver monitoring."""
@@ -865,6 +883,14 @@ class IocmngTask(TaskBase):
         if service_name not in self.service_status:
             return
 
+        # Check if PVs exist for this service
+        if service_name not in self.service_pvs:
+            self.logger.warning(
+                f"No PVs found for service '{service_name}'. Skipping status update. "
+                f"Service may have been added after PV creation or PV creation failed."
+            )
+            return
+
         try:
             if app is None:
                 # Application not found
@@ -980,9 +1006,17 @@ class IocmngTask(TaskBase):
             self.service_status[service_name]["app_status"] = "ERROR"
             self.service_status[service_name]["sync_status"] = "Unknown"
             self.service_status[service_name]["health_status"] = "Error"
-            self.service_pvs[service_name]["APP_STATUS"].set("ERROR")
-            self.service_pvs[service_name]["SYNC_STATUS"].set(3)  # Red
-            self.service_pvs[service_name]["HEALTH_STATUS"].set(3)  # Red
+            
+            # Only update PVs if they exist
+            if service_name in self.service_pvs:
+                try:
+                    self.service_pvs[service_name]["APP_STATUS"].set("ERROR")
+                    self.service_pvs[service_name]["SYNC_STATUS"].set(3)  # Red
+                    self.service_pvs[service_name]["HEALTH_STATUS"].set(3)  # Red
+                except Exception as pv_error:
+                    self.logger.debug(
+                        f"Failed to update error status PVs for {service_name}: {pv_error}"
+                    )
 
     def _update_all_service_status(self):
         """Update status for all services by querying ArgoCD applications."""
