@@ -14,6 +14,8 @@ import os
 from urllib3.exceptions import MaxRetryError, ProxyError
 from typing import Any, Dict, List, Optional
 from datetime import datetime
+import time
+from urllib.parse import urlparse
 from task_base import TaskBase
 from softioc import builder
 
@@ -104,6 +106,11 @@ class IocmngTask(TaskBase):
         self.archiver_url = None
         self.archiver_pvs = {}  # pv_name -> archiver status
         self.archiver_connectivity = {}  # pv_name -> connectivity status
+        # Archiver restart control
+        self.archiver_threshold_restart = None
+        self.archiver_wait_restart_min = None
+        self.archiver_last_restart_time = None
+        self.archiver_app_name = None
 
     def initialize(self):
         """Initialize the IOC status monitoring task."""
@@ -135,6 +142,22 @@ class IocmngTask(TaskBase):
         self.archiver_appliance = self.parameters.get(
             "archiver_appliance", "default"
         )  # Appliance name
+        self.archiver_threshold_restart = self.parameters.get(
+            "archiver_threshold_restart"
+        )  # If connected < threshold AND disconnected > threshold -> restart
+        self.archiver_wait_restart_min = self.parameters.get(
+            "archiver_wait_restart_min"
+        )  # Minutes to wait before allowing another restart
+        # Optional explicit app name; else derive from URL host
+        self.archiver_app_name = self.parameters.get("archiver_app_name")
+        if not self.archiver_app_name and self.archiver_url:
+            try:
+                host = urlparse(self.archiver_url).hostname
+                if host:
+                    # Use first host label as application name (e.g. sparc-archiver)
+                    self.archiver_app_name = host.split(".")[0]
+            except Exception:
+                pass
 
         # Kubernetes connection parameters for development/out-of-cluster usage
         self.kubeconfig_path = self.parameters.get(
@@ -1481,6 +1504,71 @@ class IocmngTask(TaskBase):
             self.logger.debug(
                 f"Archiver status: {total_pvs} total PVs, {connected_count} connected, {disconnected_count} disconnected"
             )
+
+            # Automatic restart logic
+            try:
+                if (
+                    self.archiver_threshold_restart is not None
+                    and self.archiver_wait_restart_min is not None
+                    and self.archiver_app_name
+                ):
+                    # Only attempt restart if outside the cooldown window
+                    now = time.time()
+                    can_restart = (
+                        self.archiver_last_restart_time is None
+                        or (
+                            now - self.archiver_last_restart_time
+                            >= self.archiver_wait_restart_min * 60
+                        )
+                    )
+                    if (
+                        can_restart
+                        and connected_count < self.archiver_threshold_restart
+                        and disconnected_count > self.archiver_threshold_restart
+                    ):
+                        self.logger.warning(
+                            "Archiver unhealthy (connected %d < %d, disconnected %d > %d). Restarting application '%s'.",
+                            connected_count,
+                            self.archiver_threshold_restart,
+                            disconnected_count,
+                            self.archiver_threshold_restart,
+                            self.archiver_app_name,
+                        )
+                        # Update status PV before restart
+                        try:
+                            if "ARCHIVER_STATUS" in self.pvs:
+                                self.pvs["ARCHIVER_STATUS"].set("Restarting")
+                        except Exception:
+                            pass
+                        self.set_message(
+                            f"Restarting archiver '{self.archiver_app_name}' due to low connectivity"
+                        )
+                        # Perform restart (delete & recreate application)
+                        try:
+                            self._restart_argocd_application(self.archiver_app_name)
+                        except Exception as e:
+                            self.logger.error(
+                                f"Failed to restart archiver application {self.archiver_app_name}: {e}"
+                            )
+                        else:
+                            self.archiver_last_restart_time = now
+                            self.logger.info(
+                                f"Archiver restart initiated for {self.archiver_app_name}; cooldown {self.archiver_wait_restart_min} min"
+                            )
+                    elif not can_restart and self.archiver_last_restart_time is not None:
+                        remaining = (
+                            self.archiver_wait_restart_min * 60
+                            - (now - self.archiver_last_restart_time)
+                        )
+                        if remaining > 0:
+                            self.logger.debug(
+                                f"Archiver restart cooldown active ({int(remaining)}s remaining)"
+                            )
+            except Exception as e:
+                self.logger.debug(
+                    f"Archiver auto-restart logic encountered an error: {e}",
+                    exc_info=True,
+                )
 
         except requests.exceptions.RequestException as e:
             self.logger.warning(f"Error accessing archiver API: {e}")
