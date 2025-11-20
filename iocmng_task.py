@@ -528,7 +528,7 @@ class IocmngTask(TaskBase):
 
         # Health status (mbbi: Healthy=0, Progressing=1, Degraded=2, Missing=3, Unknown=4, Warning=5, Error=6)
         ioc_pv_dict["HEALTH_STATUS"] = builder.mbbIn(
-            f"{ioc_prefix}_HEALTH_STATUS",
+            f"{ioc_prefix}_HEALTH_STAT",
             initial_value=4,
             ZRST="Healthy",
             ONST="Progressing",
@@ -618,7 +618,7 @@ class IocmngTask(TaskBase):
 
         # Health status (mbbi: Healthy=0, Progressing=1, Degraded=2, Missing=3, Unknown=4, Warning=5, Error=6)
         service_pv_dict["HEALTH_STATUS"] = builder.mbbIn(
-            f"{service_prefix}_HEALTH_STATUS",
+            f"{service_prefix}_HEALTH_STAT",
             initial_value=4,
             ZRST="Healthy",
             ONST="Progressing",
