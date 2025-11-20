@@ -262,7 +262,7 @@ def create_bool_button(name, pv_name, x, y, width=120, height=30):
     return widget
 
 
-def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
+def create_ioc_row(ioc_name, prefix, y_pos, task_name="IOCMNG", namespace=None):
     """Create widgets for a single IOC row."""
     widgets = []
 
@@ -314,7 +314,7 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
     # App Status
     app_status_widget = create_textupdate(
         f"IOC_{ioc_pv_name}_AppStatus",
-        f"{prefix}:IOCMNG:{ioc_pv_name}_APP_STATUS",
+        f"{prefix}:{task_name}:{ioc_pv_name}_APP_STATUS",
         220,
         y_pos,
         100,
@@ -340,7 +340,7 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
     # Sync LED
     sync_led = create_multi_state_led(
         f"IOC_{ioc_pv_name}_SyncLED",
-        f"{prefix}:IOCMNG:{ioc_pv_name}_SYNC_STATUS",
+        f"{prefix}:{task_name}:{ioc_pv_name}_SYNC_STATUS",
         355,
         y_pos + 5,
         20,
@@ -373,7 +373,7 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
     widgets.append(
         create_textupdate(
             f"IOC_{ioc_pv_name}_SyncStatus",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_SYNC_STATUS",
+            f"{prefix}:{task_name}:{ioc_pv_name}_SYNC_STATUS",
             380,
             y_pos,
             50,
@@ -385,7 +385,7 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
     # Health LED
     health_led = create_multi_state_led(
         f"IOC_{ioc_pv_name}_HealthLED",
-        f"{prefix}:IOCMNG:{ioc_pv_name}_HEALTH_STAT",
+        f"{prefix}:{task_name}:{ioc_pv_name}_HEALTH_STAT",
         465,
         y_pos + 5,
         20,
@@ -415,7 +415,7 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
     widgets.append(
         create_textupdate(
             f"IOC_{ioc_pv_name}_HealthStatus",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_HEALTH_STAT",
+            f"{prefix}:{task_name}:{ioc_pv_name}_HEALTH_STAT",
             490,
             y_pos,
             50,
@@ -428,7 +428,7 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
     widgets.append(
         create_textupdate(
             f"IOC_{ioc_pv_name}_LastSync",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_LAST_SYNC",
+            f"{prefix}:{task_name}:{ioc_pv_name}_LAST_SYNC",
             550,
             y_pos,
             180,
@@ -441,7 +441,7 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
     widgets.append(
         create_textupdate(
             f"IOC_{ioc_pv_name}_HealthChange",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_LAST_HEALTH",
+            f"{prefix}:{task_name}:{ioc_pv_name}_LAST_HEALTH",
             740,
             y_pos,
             180,
@@ -455,7 +455,7 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
         create_action_button(
             f"IOC_{ioc_pv_name}_Start",
             "START",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_START",
+            f"{prefix}:{task_name}:{ioc_pv_name}_START",
             930,
             y_pos,
             100,
@@ -470,7 +470,7 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
         create_action_button(
             f"IOC_{ioc_pv_name}_Stop",
             "STOP",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_STOP",
+            f"{prefix}:{task_name}:{ioc_pv_name}_STOP",
             1040,
             y_pos,
             100,
@@ -485,238 +485,7 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
         create_action_button(
             f"IOC_{ioc_pv_name}_Restart",
             "RESTART",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_RESTART",
-            1150,
-            y_pos,
-            100,
-            30,
-            fg_color=create_color(255, 255, 255),
-            bg_color=create_color(255, 140, 0),
-        )
-    )
-
-    return widgets
-
-    # Sanitize IOC name for PV (uppercase, replace hyphens)
-    ioc_pv_name = ioc_name.upper().replace("-", "_")
-
-    # Ensure EPICS record name length limits are respected
-    # Mirror the truncation logic used by the IOC task so PV names match at runtime.
-    try:
-        max_record_length = 60
-        prefix_overhead = len(prefix) + 1  # separator
-        longest_suffix = len("_LAST_HEALTH")
-        max_ioc_prefix_len = max_record_length - prefix_overhead - longest_suffix
-        if max_ioc_prefix_len > 0 and len(ioc_pv_name) > max_ioc_prefix_len:
-            original = ioc_pv_name
-            ioc_pv_name = ioc_pv_name[:max_ioc_prefix_len]
-            print(
-                f"Warning: IOC PV name '{original}' truncated to '{ioc_pv_name}' to fit EPICS {max_record_length}-char limit"
-            )
-    except Exception:
-        # On any unexpected error, fall back to the full sanitized name
-        pass
-
-    # Build the expected ArgoCD application name using the beamline namespace
-    app_name = None
-    if namespace:
-        app_name = f"{namespace}-{ioc_name}-ioc"
-    else:
-        app_name = f"{ioc_name}-ioc"
-
-    # IOC Name label
-    widgets.append(
-        create_label(f"IOC_{ioc_pv_name}_Name", ioc_name, 10, y_pos, 200, 30)
-    )
-
-    # Show the expected ArgoCD application name under the IOC name (smaller font)
-    widgets.append(
-        create_label(
-            f"IOC_{ioc_pv_name}_AppName",
-            app_name,
-            10,
-            y_pos + 18,
-            300,
-            18,
-            font_size="10.0",
-        )
-    )
-
-    # App Status
-    app_status_widget = create_textupdate(
-        f"IOC_{ioc_pv_name}_AppStatus",
-        f"{prefix}:IOCMNG:{ioc_pv_name}_APP_STATUS",
-        220,
-        y_pos,
-        100,
-        30,
-        horizontal_alignment=1,
-    )
-    # Add rules for application status background color
-    rules = ET.SubElement(app_status_widget, "rules")
-
-    # Rule for Running -> Green background
-    rule_running = ET.SubElement(rules, "rule", name="Running")
-    ET.SubElement(rule_running, "prop_id").text = "background_color"
-    expr_running = ET.SubElement(rule_running, "expression")
-    ET.SubElement(expr_running, "value").text = 'pv0=="Running"'
-    pv_running = ET.SubElement(expr_running, "pv")
-    ET.SubElement(pv_running, "name").text = "pv0"
-    ET.SubElement(pv_running, "trigger").text = "true"
-    val_running = ET.SubElement(rule_running, "value")
-    val_running.append(create_color(0, 200, 0))  # Green
-
-    widgets.append(app_status_widget)
-
-    # Sync LED
-    sync_led = create_multi_state_led(
-        f"IOC_{ioc_pv_name}_SyncLED",
-        f"{prefix}:IOCMNG:{ioc_pv_name}_SYNC_STATUS",
-        355,
-        y_pos + 5,
-        20,
-        20,
-    )
-    # Add states for sync status colors
-    states = ET.SubElement(sync_led, "states")
-
-    # State 0: Synced -> Green
-    state_synced = ET.SubElement(states, "state", value="0")
-    color_synced = ET.SubElement(state_synced, "color")
-    color_synced.append(create_color(0, 200, 0))  # Green
-
-    # State 1: OutOfSync -> Yellow
-    state_outofsync = ET.SubElement(states, "state", value="1")
-    color_outofsync = ET.SubElement(state_outofsync, "color")
-    color_outofsync.append(create_color(255, 255, 0))  # Yellow
-
-    # State 2: Unknown -> Orange
-    state_unknown = ET.SubElement(states, "state", value="2")
-    color_unknown = ET.SubElement(state_unknown, "color")
-    color_unknown.append(create_color(255, 140, 0))  # Orange
-
-    # State 3: Error -> Red
-    state_error = ET.SubElement(states, "state", value="3")
-    color_error = ET.SubElement(state_error, "color")
-    color_error.append(create_color(200, 0, 0))  # Red
-
-    widgets.append(sync_led)  # Sync Status text
-    widgets.append(
-        create_textupdate(
-            f"IOC_{ioc_pv_name}_SyncStatus",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_SYNC_STATUS",
-            380,
-            y_pos,
-            50,
-            30,
-            horizontal_alignment=1,
-        )
-    )
-
-    # Health LED
-    health_led = create_multi_state_led(
-        f"IOC_{ioc_pv_name}_HealthLED",
-        f"{prefix}:IOCMNG:{ioc_pv_name}_HEALTH_STAT",
-        465,
-        y_pos + 5,
-        20,
-        20,
-    )
-    # Add states for health status colors
-    states = ET.SubElement(health_led, "states")
-
-    # State 0: Healthy -> Green
-    state_healthy = ET.SubElement(states, "state", value="0")
-    color_healthy = ET.SubElement(state_healthy, "color")
-    color_healthy.append(create_color(0, 200, 0))  # Green
-
-    # State 1: Progressing -> Yellow
-    state_progressing = ET.SubElement(states, "state", value="1")
-    color_progressing = ET.SubElement(state_progressing, "color")
-    color_progressing.append(create_color(255, 255, 0))  # Yellow
-
-    # State 5: Warning -> Yellow
-    state_warning = ET.SubElement(states, "state", value="5")
-    color_warning = ET.SubElement(state_warning, "color")
-    color_warning.append(create_color(255, 255, 0))  # Yellow
-
-    # Other states (2,3,4,6): Red (fallback color will handle this)
-
-    widgets.append(health_led)  # Health Status text
-    widgets.append(
-        create_textupdate(
-            f"IOC_{ioc_pv_name}_HealthStatus",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_HEALTH_STAT",
-            490,
-            y_pos,
-            50,
-            30,
-            horizontal_alignment=1,
-        )
-    )
-
-    # Last Sync Time
-    widgets.append(
-        create_textupdate(
-            f"IOC_{ioc_pv_name}_LastSync",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_LAST_SYNC",
-            550,
-            y_pos,
-            180,
-            30,
-            horizontal_alignment=1,
-        )
-    )
-
-    # Last Health Change
-    widgets.append(
-        create_textupdate(
-            f"IOC_{ioc_pv_name}_HealthChange",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_LAST_HEALTH",
-            740,
-            y_pos,
-            180,
-            30,
-            horizontal_alignment=1,
-        )
-    )
-
-    # START button
-    widgets.append(
-        create_action_button(
-            f"IOC_{ioc_pv_name}_Start",
-            "START",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_START",
-            930,
-            y_pos,
-            100,
-            30,
-            fg_color=create_color(255, 255, 255),
-            bg_color=create_color(0, 150, 0),
-        )
-    )
-
-    # STOP button
-    widgets.append(
-        create_action_button(
-            f"IOC_{ioc_pv_name}_Stop",
-            "STOP",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_STOP",
-            1040,
-            y_pos,
-            100,
-            30,
-            fg_color=create_color(255, 255, 255),
-            bg_color=create_color(200, 0, 0),
-        )
-    )
-
-    # RESTART button
-    widgets.append(
-        create_action_button(
-            f"IOC_{ioc_pv_name}_Restart",
-            "RESTART",
-            f"{prefix}:IOCMNG:{ioc_pv_name}_RESTART",
+            f"{prefix}:{task_name}:{ioc_pv_name}_RESTART",
             1150,
             y_pos,
             100,
@@ -729,7 +498,7 @@ def create_ioc_row(ioc_name, prefix, y_pos, namespace=None):
     return widgets
 
 
-def create_service_row(service_name, prefix, y_pos, namespace=None):
+def create_service_row(service_name, prefix, y_pos, task_name="IOCMNG", namespace=None):
     """Create widgets for a single service row."""
     widgets = []
 
@@ -783,7 +552,7 @@ def create_service_row(service_name, prefix, y_pos, namespace=None):
     # App Status
     app_status_widget = create_textupdate(
         f"Service_{service_pv_name}_AppStatus",
-        f"{prefix}:IOCMNG:{service_pv_name}_APP_STATUS",
+        f"{prefix}:{task_name}:{service_pv_name}_APP_STATUS",
         220,
         y_pos,
         100,
@@ -809,7 +578,7 @@ def create_service_row(service_name, prefix, y_pos, namespace=None):
     # Sync LED
     sync_led = create_multi_state_led(
         f"Service_{service_pv_name}_SyncLED",
-        f"{prefix}:IOCMNG:{service_pv_name}_SYNC_STATUS",
+        f"{prefix}:{task_name}:{service_pv_name}_SYNC_STATUS",
         355,
         y_pos + 5,
         20,
@@ -842,7 +611,7 @@ def create_service_row(service_name, prefix, y_pos, namespace=None):
     widgets.append(
         create_textupdate(
             f"Service_{service_pv_name}_SyncStatus",
-            f"{prefix}:IOCMNG:{service_pv_name}_SYNC_STATUS",
+            f"{prefix}:{task_name}:{service_pv_name}_SYNC_STATUS",
             380,
             y_pos,
             50,
@@ -854,7 +623,7 @@ def create_service_row(service_name, prefix, y_pos, namespace=None):
     # Health LED
     health_led = create_multi_state_led(
         f"Service_{service_pv_name}_HealthLED",
-        f"{prefix}:IOCMNG:{service_pv_name}_HEALTH_STAT",
+        f"{prefix}:{task_name}:{service_pv_name}_HEALTH_STATUS",
         465,
         y_pos + 5,
         20,
@@ -884,7 +653,7 @@ def create_service_row(service_name, prefix, y_pos, namespace=None):
     widgets.append(
         create_textupdate(
             f"Service_{service_pv_name}_HealthStatus",
-            f"{prefix}:IOCMNG:{service_pv_name}_HEALTH_STAT",
+            f"{prefix}:{task_name}:{service_pv_name}_HEALTH_STATUS",
             490,
             y_pos,
             50,
@@ -897,7 +666,7 @@ def create_service_row(service_name, prefix, y_pos, namespace=None):
     widgets.append(
         create_textupdate(
             f"Service_{service_pv_name}_LastSync",
-            f"{prefix}:IOCMNG:{service_pv_name}_LAST_SYNC",
+            f"{prefix}:{task_name}:{service_pv_name}_LAST_SYNC",
             550,
             y_pos,
             180,
@@ -910,7 +679,7 @@ def create_service_row(service_name, prefix, y_pos, namespace=None):
     widgets.append(
         create_textupdate(
             f"Service_{service_pv_name}_HealthChange",
-            f"{prefix}:IOCMNG:{service_pv_name}_LAST_HEALTH",
+            f"{prefix}:{task_name}:{service_pv_name}_LAST_HEALTH",
             740,
             y_pos,
             180,
@@ -924,7 +693,7 @@ def create_service_row(service_name, prefix, y_pos, namespace=None):
         create_action_button(
             f"Service_{service_pv_name}_Start",
             "START",
-            f"{prefix}:IOCMNG:{service_pv_name}_START",
+            f"{prefix}:{task_name}:{service_pv_name}_START",
             930,
             y_pos,
             100,
@@ -939,7 +708,7 @@ def create_service_row(service_name, prefix, y_pos, namespace=None):
         create_action_button(
             f"Service_{service_pv_name}_Stop",
             "STOP",
-            f"{prefix}:IOCMNG:{service_pv_name}_STOP",
+            f"{prefix}:{task_name}:{service_pv_name}_STOP",
             1040,
             y_pos,
             100,
@@ -954,7 +723,7 @@ def create_service_row(service_name, prefix, y_pos, namespace=None):
         create_action_button(
             f"Service_{service_pv_name}_Restart",
             "RESTART",
-            f"{prefix}:IOCMNG:{service_pv_name}_RESTART",
+            f"{prefix}:{task_name}:{service_pv_name}_RESTART",
             1150,
             y_pos,
             100,
@@ -967,7 +736,7 @@ def create_service_row(service_name, prefix, y_pos, namespace=None):
     return widgets
 
 
-def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
+def generate_IOCMNG_bob(beamline_path, output_path, prefix=None, config_path=None):
     """Generate IOC Manager BOB file from beamline configuration."""
 
     # Load beamline configuration
@@ -977,6 +746,21 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     # Get prefix from beamline config or use provided
     if prefix is None:
         prefix = beamline_config.get("prefix", "SPARC:CONTROL2")
+
+    # Load config to find task name
+    task_name = "IOCMNG"  # Default
+    if config_path:
+        try:
+            with open(config_path, "r") as f:
+                config = yaml.safe_load(f)
+            # Find the iocmng task
+            for task in config.get("tasks", []):
+                if task.get("module") == "iocmng_task":
+                    task_name = task.get("name", "IOCMNG").upper()
+                    break
+        except Exception as e:
+            print(f"Warning: Could not load config from {config_path}: {e}")
+            print("Using default task name 'IOCMNG'")
 
     # Beamline namespace (used to construct ArgoCD application names)
     namespace = beamline_config.get("namespace", None)
@@ -1072,7 +856,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
 
     # Task enable button
     task_group.append(
-        create_bool_button("TaskEnable", f"{prefix}:IOCMNG:ENABLE", 20, 30, 120, 30)
+        create_bool_button("TaskEnable", f"{prefix}:{task_name}:ENABLE", 20, 30, 120, 30)
     )
 
     # Status label and value
@@ -1082,7 +866,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
         )
     )
     task_group.append(
-        create_textupdate("TaskStatus", f"{prefix}:IOCMNG:STATUS", 250, 30, 120, 30)
+        create_textupdate("TaskStatus", f"{prefix}:{task_name}:STATUS", 250, 30, 120, 30)
     )
 
     # Cycles label and value
@@ -1093,7 +877,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     )
     task_group.append(
         create_textupdate(
-            "CycleCount", f"{prefix}:IOCMNG:CYCLE_COUNT", 480, 30, 100, 30
+            "CycleCount", f"{prefix}:{task_name}:CYCLE_COUNT", 480, 30, 100, 30
         )
     )
 
@@ -1111,7 +895,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
         )
     )
     task_group.append(
-        create_textupdate("TotalIOCs", f"{prefix}:IOCMNG:TOTAL_IOCS", 690, 30, 60, 30)
+        create_textupdate("TotalIOCs", f"{prefix}:{task_name}:TOTAL_IOCS", 690, 30, 60, 30)
     )
 
     task_group.append(
@@ -1128,7 +912,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     )
     task_group.append(
         create_textupdate(
-            "HealthyCount", f"{prefix}:IOCMNG:HEALTHY_COUNT", 840, 30, 60, 30
+            "HealthyCount", f"{prefix}:{task_name}:HEALTHY_COUNT", 840, 30, 60, 30
         )
     )
 
@@ -1146,7 +930,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     )
     task_group.append(
         create_textupdate(
-            "ProgressingCount", f"{prefix}:IOCMNG:PROGRESSING_COUNT", 1015, 30, 60, 30
+            "ProgressingCount", f"{prefix}:{task_name}:PROGRESSING_COUNT", 1015, 30, 60, 30
         )
     )
 
@@ -1157,7 +941,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     )
     task_group.append(
         create_textupdate(
-            "OtherCount", f"{prefix}:IOCMNG:OTHER_COUNT", 1160, 30, 60, 30
+            "OtherCount", f"{prefix}:{task_name}:OTHER_COUNT", 1160, 30, 60, 30
         )
     )
 
@@ -1176,7 +960,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     )
     task_group.append(
         create_textupdate(
-            "TotalServices", f"{prefix}:IOCMNG:TOTAL_SERVICES", 710, 70, 60, 30
+            "TotalServices", f"{prefix}:{task_name}:TOTAL_SERVICES", 710, 70, 60, 30
         )
     )
 
@@ -1195,7 +979,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     task_group.append(
         create_textupdate(
             "ServicesHealthyCount",
-            f"{prefix}:IOCMNG:SERVICES_HEALTHY_COUNT",
+            f"{prefix}:{task_name}:SERVICES_HEALTHY_COUNT",
             910,
             70,
             60,
@@ -1218,7 +1002,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     task_group.append(
         create_textupdate(
             "ServicesProgressingCount",
-            f"{prefix}:IOCMNG:SERVICES_PROGRESSING_COUNT",
+            f"{prefix}:{task_name}:SERVICES_PROGRESSING_COUNT",
             1130,
             70,
             60,
@@ -1241,7 +1025,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     task_group.append(
         create_textupdate(
             "ServicesOtherCount",
-            f"{prefix}:IOCMNG:SERVICES_OTHER_COUNT",
+            f"{prefix}:{task_name}:SERVICES_OTHER_COUNT",
             1320,
             70,
             60,
@@ -1264,7 +1048,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     )
     task_group.append(
         create_textupdate(
-            "ArchiverStatus", f"{prefix}:IOCMNG:ARCHIVER_STATUS", 110, 110, 100, 30
+            "ArchiverStatus", f"{prefix}:{task_name}:ARCHIVER_STATUS", 110, 110, 100, 30
         )
     )
 
@@ -1282,7 +1066,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     )
     task_group.append(
         create_textupdate(
-            "ArchiverTotalPVs", f"{prefix}:IOCMNG:ARCHIVER_TOTAL_PVS", 310, 110, 80, 30
+            "ArchiverTotalPVs", f"{prefix}:{task_name}:ARCHIVER_TOTAL_PVS", 310, 110, 80, 30
         )
     )
 
@@ -1301,7 +1085,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     task_group.append(
         create_textupdate(
             "ArchiverConnectedPVs",
-            f"{prefix}:IOCMNG:ARCHIVER_CONNECTED_PVS",
+            f"{prefix}:{task_name}:ARCHIVER_CONNECTED_PVS",
             490,
             110,
             80,
@@ -1324,7 +1108,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     task_group.append(
         create_textupdate(
             "ArchiverDisconnectedPVs",
-            f"{prefix}:IOCMNG:ARCHIVER_DISCONNECTED_PVS",
+            f"{prefix}:{task_name}:ARCHIVER_DISCONNECTED_PVS",
             690,
             110,
             80,
@@ -1337,7 +1121,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
         create_label("MessageLabel", "Message:", 20, 140, 80, 30, bold=True)
     )
     task_group.append(
-        create_textupdate("TaskMessage", f"{prefix}:IOCMNG:MESSAGE", 110, 140, 1250, 30)
+        create_textupdate("TaskMessage", f"{prefix}:{task_name}:MESSAGE", 110, 140, 1250, 30)
     )
 
     display.append(task_group)
@@ -1430,14 +1214,14 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
     y_pos = 85
     for ioc in iocs:
         ioc_name = ioc.get("name", "unknown")
-        for widget in create_ioc_row(ioc_name, prefix, y_pos, namespace=namespace):
+        for widget in create_ioc_row(ioc_name, prefix, y_pos, task_name, namespace):
             all_children.append(widget)
         y_pos += row_height
 
     # Add service rows for ALL tab
     for service_name in services:
         for widget in create_service_row(
-            service_name, prefix, y_pos, namespace=namespace
+            service_name, prefix, y_pos, task_name, namespace
         ):
             all_children.append(widget)
         y_pos += row_height
@@ -1471,7 +1255,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
             for ioc in iocs_by_devgroup[devgroup]:
                 ioc_name = ioc.get("name", "unknown")
                 for widget in create_ioc_row(
-                    ioc_name, prefix, y_pos, namespace=namespace
+                    ioc_name, prefix, y_pos, task_name, namespace
                 ):
                     children.append(widget)
                 y_pos += row_height
@@ -1480,7 +1264,7 @@ def generate_IOCMNG_bob(beamline_path, output_path, prefix=None):
         if devgroup in services_by_devgroup:
             for service_name in services_by_devgroup[devgroup]:
                 for widget in create_service_row(
-                    service_name, prefix, y_pos, namespace=namespace
+                    service_name, prefix, y_pos, task_name, namespace
                 ):
                     children.append(widget)
                 y_pos += row_height
@@ -1564,6 +1348,12 @@ def main():
         default=None,
         help="PV prefix (default: read from beamline config)",
     )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to task config file to extract task name (optional)",
+    )
 
     args = parser.parse_args()
 
@@ -1574,7 +1364,7 @@ def main():
 
     # Generate BOB file
     try:
-        generate_IOCMNG_bob(args.beamline, args.output, args.prefix)
+        generate_IOCMNG_bob(args.beamline, args.output, args.prefix, args.config)
         return 0
     except Exception as e:
         print(f"Error generating IOC Manager OPI: {e}")

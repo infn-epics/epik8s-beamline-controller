@@ -148,3 +148,4 @@ tasks:
     parameters:
       update_rate: 0.1 # Hz (every 10 seconds)
       argocd_namespace: "argocd"
+      archiver_url: "http://sparc-archiver.k8sda.lnf.infn.it"
